@@ -187,4 +187,17 @@ class RemoteCatchRepository extends CatchRepository {
 
     _bumpAfterMutation();
   }
+
+  @override
+  Future<void> deletePublished(String id) async {
+    if (!_auth.isReady || !_auth.isLoggedIn) {
+      throw ApiException(message: '请先登录后再操作');
+    }
+    final trimmed = id.trim();
+    if (trimmed.isEmpty || !_uuidPattern.hasMatch(trimmed)) {
+      throw ApiException(message: '无法删除该记录');
+    }
+    await _api.delete<dynamic>(CatchPublishEndpoints.updatePath(trimmed));
+    _bumpAfterMutation();
+  }
 }

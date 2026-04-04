@@ -44,4 +44,7 @@ abstract class CatchRepository extends ChangeNotifier {
     bool updating = false,
     String? updateId,
   });
+
+  /// 永久删除已发布鱼获（本地从列表移除；远程 `DELETE /v1/catches/:id`）。
+  Future<void> deletePublished(String id);
 }

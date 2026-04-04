@@ -248,7 +248,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                      child: Text(
+                      child: SelectableText(
                         desc,
                         style: TextStyle(
                           height: 1.6,

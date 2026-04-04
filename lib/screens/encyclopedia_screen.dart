@@ -128,6 +128,16 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
   Map<String, SpeciesItem> get _speciesByScientific =>
       {for (final s in _species) s.speciesScientificName: s};
 
+  /// 将单条鱼获上的学名对齐到图鉴卡片用的 [SpeciesCatalog] 键（空白/大小写 → 目录里的 canonical）。
+  String? _catalogKeyForCatchScientific(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    if (t == 'Indeterminate' || t == 'Unnamed species') return null;
+    final canon = SpeciesCatalog.tryByScientificName(t)?.scientificName ?? t;
+    if (!_speciesByScientific.containsKey(canon)) return null;
+    return canon;
+  }
+
   /// 与「全部种类」网格一致：该学名累计渔获 >0 即算解锁。
   bool _isSpeciesUnlocked(String scientificName) => (_myCatchCounts[scientificName] ?? 0) > 0;
 
@@ -137,20 +147,21 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
 
   Future<void> _loadEncyclopedia() async {
     final api = context.read<ApiClient>();
+    final repo = context.read<CatchRepository>();
     final loggedIn = context.read<AuthSession>().isLoggedIn;
+    // 仅当鱼获时间线也来自远端时，图鉴计数才用 BFF；否则（默认本地仓）与首页同源，避免「首页有图、图鉴 0」。
+    final useServerSpeciesCounts = loggedIn && repo.usesRemoteTimeline;
     final total = _species.length;
     final counts = <String, int>{};
     String? err;
 
-    if (!loggedIn) {
+    if (!useServerSpeciesCounts) {
       try {
-        final page = await context.read<CatchRepository>().timelineHome();
+        final page = await repo.timelineHome();
         for (final item in page.items) {
-          final s = item.scientificName.trim();
-          if (s.isEmpty) continue;
-          if (s == 'Indeterminate' || s == 'Unnamed species') continue;
-          if (!_speciesByScientific.containsKey(s)) continue;
-          counts[s] = (counts[s] ?? 0) + 1;
+          final key = _catalogKeyForCatchScientific(item.scientificName);
+          if (key == null) continue;
+          counts[key] = (counts[key] ?? 0) + 1;
         }
       } catch (e) {
         err = e.toString();
@@ -172,12 +183,12 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                     ? (SpeciesCatalog.tryBySpeciesZh(zhLegacy)?.scientificName ?? zhLegacy)
                     : '');
             if (sn.isEmpty) continue;
-            if (sn == 'Indeterminate' || sn == 'Unnamed species') continue;
-            if (!_speciesByScientific.containsKey(sn)) continue;
+            final key = _catalogKeyForCatchScientific(sn);
+            if (key == null) continue;
             final catchCount = map['catch_count'];
             final c = (catchCount as num?)?.toInt() ?? 0;
             if (c <= 0) continue;
-            counts[sn] = c;
+            counts[key] = c;
           }
         }
       } on ApiException catch (e) {

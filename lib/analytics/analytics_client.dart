@@ -19,6 +19,9 @@ class AnalyticsClient {
 
   static const _kAnonId = 'analytics_anon_id_v1';
 
+  /// Web: `1 << 32` breaks `Random.nextInt` (invalid bound on dart2js); keep max ≤ 2^30.
+  static int _randomSuffix() => Random().nextInt(1 << 30);
+
   String? _anonId;
   String? _sessionId;
   Future<void>? _initFuture;
@@ -31,11 +34,11 @@ class AnalyticsClient {
     if (existing != null && existing.isNotEmpty) {
       _anonId = existing;
     } else {
-      _anonId = 'anon_${DateTime.now().toUtc().millisecondsSinceEpoch}_${Random().nextInt(1 << 32)}';
+      _anonId = 'anon_${DateTime.now().toUtc().millisecondsSinceEpoch}_${_randomSuffix()}';
       await p.setString(_kAnonId, _anonId!);
     }
 
-    _sessionId = 'sess_${DateTime.now().toUtc().millisecondsSinceEpoch}_${Random().nextInt(1 << 32)}';
+    _sessionId = 'sess_${DateTime.now().toUtc().millisecondsSinceEpoch}_${_randomSuffix()}';
   }
 
   String? get anonId => _anonId;

@@ -25,4 +25,22 @@ abstract final class CatchPublishImagePrepare {
     final q = CatchPublishImageConfig.jpegQuality.clamp(1, 100);
     return Uint8List.fromList(img.encodeJpg(work, quality: q));
   }
+
+  /// 写入本地 [SharedPreferences] 用：单 key JSON 不宜过大（Web 尤甚），长边与质量比上传更保守。
+  static Uint8List toLocalPersistJpeg(Uint8List raw) {
+    final decoded = img.decodeImage(raw);
+    if (decoded == null) {
+      return toUploadJpeg(raw);
+    }
+    var work = decoded;
+    const max = 1200;
+    if (work.width > max || work.height > max) {
+      if (work.width >= work.height) {
+        work = img.copyResize(work, width: max);
+      } else {
+        work = img.copyResize(work, height: max);
+      }
+    }
+    return Uint8List.fromList(img.encodeJpg(work, quality: 72));
+  }
 }

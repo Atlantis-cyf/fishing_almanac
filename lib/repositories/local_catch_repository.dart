@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:fishing_almanac/api/catch_publish_image_prepare.dart';
 import 'package:fishing_almanac/data/catch_feed_data.dart';
 import 'package:fishing_almanac/models/catch_feed_item.dart';
 import 'package:fishing_almanac/models/published_catch.dart';
@@ -19,6 +19,9 @@ class LocalCatchRepository extends CatchRepository {
   }
 
   static const _key = 'published_catches_v1';
+
+  /// Base64 超过此长度则压 JPEG 后再存，降低 SharedPreferences 单 key 体积（Web 易失败）。
+  static const _base64CompactThreshold = 120000;
 
   final List<PublishedCatch> _items = [];
   late final Future<void> _loadFuture;
@@ -79,14 +82,54 @@ class LocalCatchRepository extends CatchRepository {
     _bump();
   }
 
+  PublishedCatch _compactForLocalStorage(PublishedCatch p) {
+    final b64 = p.imageBase64;
+    if (b64 == null || b64.isEmpty) return p;
+    if (b64.length < _base64CompactThreshold) return p;
+    try {
+      final raw = base64Decode(b64);
+      final jpeg = CatchPublishImagePrepare.toLocalPersistJpeg(raw);
+      if (jpeg.isEmpty || jpeg.length >= raw.length) return p;
+      final outB64 = base64Encode(jpeg);
+      if (outB64.length >= b64.length) return p;
+      return PublishedCatch(
+        id: p.id,
+        imageBase64: outB64,
+        imageUrlFallback: p.imageUrlFallback,
+        scientificName: p.scientificName,
+        notes: p.notes,
+        weightKg: p.weightKg,
+        lengthCm: p.lengthCm,
+        locationLabel: p.locationLabel,
+        lat: p.lat,
+        lng: p.lng,
+        occurredAt: p.occurredAt,
+        reviewStatus: p.reviewStatus,
+      );
+    } catch (e, st) {
+      debugPrint('LocalCatchRepository._compactForLocalStorage skipped: $e\n$st');
+      return p;
+    }
+  }
+
+  void _compactAllItemsInMemory() {
+    for (var i = 0; i < _items.length; i++) {
+      _items[i] = _compactForLocalStorage(_items[i]);
+    }
+  }
+
   Future<void> _persist() async {
     try {
+      _compactAllItemsInMemory();
       final p = await SharedPreferences.getInstance();
       await p.setString(_key, jsonEncode(_items.map((e) => e.toJson()).toList()));
       _clearError();
     } catch (e, st) {
       debugPrint('LocalCatchRepository._persist failed: $e\n$st');
-      throw PersistenceException('无法保存鱼获到本地，请重试', cause: e);
+      const webHint =
+          '无法保存鱼获到本地（网页存储有大小限制）。请压缩照片、减少条数，或使用 flutter run --dart-define=USE_REMOTE_CATCH_REPOSITORY=true 同步到服务器。';
+      const nativeHint = '无法保存鱼获到本地，请重试';
+      throw PersistenceException(kIsWeb ? webHint : nativeHint, cause: e);
     }
   }
 
@@ -125,11 +168,12 @@ class LocalCatchRepository extends CatchRepository {
   @override
   Future<void> upsertLocal(PublishedCatch publishedCatch) async {
     await _ensureLoaded();
-    final i = _items.indexWhere((e) => e.id == publishedCatch.id);
+    final toStore = _compactForLocalStorage(publishedCatch);
+    final i = _items.indexWhere((e) => e.id == toStore.id);
     if (i >= 0) {
-      _items[i] = publishedCatch;
+      _items[i] = toStore;
     } else {
-      _items.add(publishedCatch);
+      _items.add(toStore);
     }
     await _persist();
     _bump();
@@ -143,5 +187,15 @@ class LocalCatchRepository extends CatchRepository {
     String? updateId,
   }) async {
     await upsertLocal(publishedCatch);
+  }
+
+  @override
+  Future<void> deletePublished(String id) async {
+    await _ensureLoaded();
+    final before = _items.length;
+    _items.removeWhere((e) => e.id == id);
+    if (_items.length == before) return;
+    await _persist();
+    _bump();
   }
 }

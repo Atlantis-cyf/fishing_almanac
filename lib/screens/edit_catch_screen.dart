@@ -17,6 +17,8 @@ import 'package:fishing_almanac/state/catch_draft.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/catch_ui_constants.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
+import 'package:fishing_almanac/widgets/publish_loading_overlay.dart';
+import 'package:fishing_almanac/widgets/species_catalog_search_field.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class EditCatchScreen extends StatefulWidget {
@@ -30,6 +32,7 @@ class EditCatchScreen extends StatefulWidget {
 
 class _EditCatchScreenState extends State<EditCatchScreen> {
   final _speciesController = TextEditingController();
+  final _speciesFocusNode = FocusNode();
   final _notesController = TextEditingController();
   final _weightController = TextEditingController();
   final _lengthController = TextEditingController();
@@ -81,6 +84,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
   @override
   void dispose() {
     _manualSpeciesDebounce?.cancel();
+    _speciesFocusNode.dispose();
     _speciesController.dispose();
     _notesController.dispose();
     _weightController.dispose();
@@ -434,6 +438,15 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         draft.editingReviewStatus.blocksEditingWhilePending) {
       return;
     }
+    // 立刻上锁，避免在首个 await 之前连点触发多次发布。
+    setState(() => _publishing = true);
+    if (!mounted) return;
+    // 先让出事件循环并等一帧绘制完成，再跑后续同步准备；否则界面会卡在「发布鱼获」上。
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
     final repo = context.read<CatchRepository>();
     final analytics = context.read<AnalyticsClient>();
 
@@ -477,11 +490,10 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     draft.notes = _notesController.text.trim();
     draft.weightKg = weightParsed;
     draft.lengthCm = lengthParsed;
-    final original =
-        widget.editingPublishedId != null ? await repo.getById(widget.editingPublishedId!) : null;
-    final saved = draft.buildPublishedForSave(original: original);
-    setState(() => _publishing = true);
     try {
+      final original =
+          widget.editingPublishedId != null ? await repo.getById(widget.editingPublishedId!) : null;
+      final saved = draft.buildPublishedForSave(original: original);
       await repo.publish(
         saved,
         imageBytes: draft.imageBytes,
@@ -611,13 +623,11 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          if (_publishing)
-            const LinearProgressIndicator(
-              minHeight: 3,
-              backgroundColor: Colors.transparent,
-            ),
+          Column(
+            children: [
           if (reviewBanner.isNotEmpty)
             Material(
               color: AppColors.surfaceContainerHigh.withValues(alpha: 0.9),
@@ -645,7 +655,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    onPressed: () => _onClosePressed(context),
+                    onPressed: _publishing ? null : () => _onClosePressed(context),
                     icon: const Icon(Icons.close, color: AppColors.cyanNav, size: 26),
                   ),
                 ),
@@ -724,6 +734,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                     confidenceLabel: _confidenceLabel,
                     loading: _aiLoading,
                     speciesController: _speciesController,
+                    speciesFocusNode: _speciesFocusNode,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -828,53 +839,65 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(24, 8, 24, 24 + MediaQuery.paddingOf(context).bottom),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF22d3ee), Color(0xFF2563eb)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF22d3ee).withValues(alpha: 0.35),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF22d3ee), Color(0xFF2563eb)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF22d3ee).withValues(alpha: 0.35),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: (_publishing || reviewLocksEditing) ? null : _publish,
-                  borderRadius: BorderRadius.circular(999),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          reviewLocksEditing ? Icons.lock_outline_rounded : Icons.send_rounded,
-                          color: const Color(0xFF0f172a),
-                          size: 22,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: (_publishing || reviewLocksEditing) ? null : _publish,
+                      borderRadius: BorderRadius.circular(999),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              reviewLocksEditing ? Icons.lock_outline_rounded : Icons.send_rounded,
+                              color: const Color(0xFF0f172a),
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              reviewLocksEditing ? '审核中' : '发布鱼获',
+                              style: GoogleFonts.manrope(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                                color: const Color(0xFF0f172a),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Text(
-                          reviewLocksEditing ? '审核中' : '发布鱼获',
-                          style: GoogleFonts.manrope(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            color: const Color(0xFF0f172a),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
+            ],
+          ),
+          if (_publishing)
+            const Positioned.fill(
+              child: PublishLoadingOverlay(),
+            ),
         ],
       ),
     );
@@ -887,12 +910,14 @@ class _AiSpeciesCard extends StatelessWidget {
     required this.confidenceLabel,
     required this.loading,
     required this.speciesController,
+    required this.speciesFocusNode,
   });
 
   final String headlineSpecies;
   final String confidenceLabel;
   final bool loading;
   final TextEditingController speciesController;
+  final FocusNode speciesFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -972,25 +997,9 @@ class _AiSpeciesCard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 14),
-          TextField(
+          SpeciesCatalogSearchField(
             controller: speciesController,
-            style: const TextStyle(color: AppColors.onSurface),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search, color: AppColors.onSurfaceVariant),
-              hintText: '搜索或修改鱼种…',
-              hintStyle: TextStyle(color: AppColors.onSurfaceVariant.withValues(alpha: 0.55)),
-              filled: true,
-              fillColor: AppColors.surfaceContainerHighest.withValues(alpha: 0.45),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(999),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(999),
-                borderSide: BorderSide(color: AppColors.cyanNav.withValues(alpha: 0.45)),
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-            ),
+            focusNode: speciesFocusNode,
           ),
         ],
       ),

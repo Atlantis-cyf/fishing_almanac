@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import 'package:fishing_almanac/api/api_config.dart';
+
 /// 与后端约定对齐的错误载荷（常见字段兼容解析）。
 class ApiError {
   const ApiError({
@@ -94,7 +96,9 @@ class ApiException implements Exception {
         );
       case DioExceptionType.connectionError:
         return ApiException(
-          message: '网络不可用，请稍后重试',
+          message:
+              '无法连接后端 ${ApiConfig.baseUrl}。本机调试请在 fishing_almanac/backend 执行 npm start；'
+              '网页/线上包需用 flutter build web --dart-define=API_BASE_URL=https://你的BFF域名 重新构建。',
           statusCode: status,
           dioType: e.type,
           cause: e,

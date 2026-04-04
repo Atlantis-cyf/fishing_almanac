@@ -30,6 +30,51 @@ abstract final class SpeciesCatalog {
     return null;
   }
 
+  /// 编辑页物种搜索：中文名子串 + 拉丁/英文名子串（不区分大小写）+ 分类文案，按相关度排序。
+  static List<SpeciesCatalogEntry> searchSpeciesForEdit(String rawQuery, {int limit = 16}) {
+    final q = rawQuery.trim();
+    if (q.isEmpty) return const [];
+    final qLower = q.toLowerCase();
+    final limitClamped = limit.clamp(1, 64);
+
+    final hits = <({SpeciesCatalogEntry e, int score})>[];
+    for (final e in all) {
+      final zh = e.speciesZh.trim();
+      if (zh.isEmpty) continue;
+
+      var score = 0;
+      if (zh.contains(q)) {
+        score += zh.startsWith(q) ? 120 : 70;
+        final idx = zh.indexOf(q);
+        if (idx >= 0) score += (24 - idx).clamp(0, 24);
+      }
+
+      final sciLower = e.scientificName.toLowerCase();
+      if (sciLower.contains(qLower)) {
+        score += sciLower.startsWith(qLower) ? 55 : 40;
+      }
+
+      final en = (e.nameEn ?? '').trim().toLowerCase();
+      if (en.isNotEmpty && en.contains(qLower)) {
+        score += en.startsWith(qLower) ? 40 : 28;
+      }
+
+      if (e.taxonomyZh.contains(q)) {
+        score += 12;
+      }
+
+      if (score > 0) hits.add((e: e, score: score));
+    }
+
+    hits.sort((a, b) {
+      final c = b.score.compareTo(a.score);
+      if (c != 0) return c;
+      return a.e.speciesZh.compareTo(b.e.speciesZh);
+    });
+
+    return hits.take(limitClamped).map((h) => h.e).toList();
+  }
+
   /// 未知鱼种：用拉丁占位；展示仍可用中文入参转成学名键。
   static SpeciesCatalogEntry fallbackForScientificName(String scientificNameRaw) {
     final s = scientificNameRaw.trim();

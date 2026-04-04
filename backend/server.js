@@ -741,6 +741,26 @@ app.put('/v1/catches/:id', upload.single(IMAGE_FIELD), async (req, res) => {
   return res.json(normalizeCatchRow(data));
 });
 
+app.delete('/v1/catches/:id', async (req, res) => {
+  const user = await requireUser(req);
+  if (!user) return jsonError(res, 401, '请先登录');
+
+  const id = String(req.params.id || '').trim();
+  if (!id) return jsonError(res, 400, '缺少鱼获记录ID');
+
+  const { data, error } = await supabaseAdmin
+    .from('catches')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select('id');
+
+  if (error) return jsonError(res, 500, '删除鱼获失败', String(error.message || error));
+  if (!data || data.length === 0) return jsonError(res, 404, '未找到该鱼获记录');
+
+  return res.status(204).send();
+});
+
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[bff] listening on http://localhost:${PORT}`);

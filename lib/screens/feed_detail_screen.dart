@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +13,7 @@ import 'package:fishing_almanac/models/catch_feed_item.dart';
 import 'package:fishing_almanac/models/catch_review_status.dart';
 import 'package:fishing_almanac/repositories/catch_repository.dart';
 import 'package:fishing_almanac/repositories/catch_timeline_cursor.dart';
+import 'package:fishing_almanac/repositories/persistence_exception.dart';
 import 'package:fishing_almanac/state/catch_draft.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/catch_ui_constants.dart';
@@ -83,6 +83,51 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
     }
     if (oldWidget.anchorCatchId != widget.anchorCatchId) {
       _didInitialScroll = false;
+    }
+  }
+
+  Future<void> _confirmAndDeletePublished(String publishedId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('永久删除'),
+        content: const Text('是否永久删除此鱼获？删除后无法恢复。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('否')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            child: const Text('是'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<CatchRepository>().deletePublished(publishedId);
+      if (!mounted) return;
+      setState(() {
+        _items.removeWhere((e) => e.sourcePublishedId == publishedId || e.id == publishedId);
+        if (_items.isEmpty) _phase = FeedDetailLoadPhase.empty;
+      });
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('已删除'), behavior: SnackBarBehavior.floating),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
+      );
+    } on PersistenceException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
+      );
     }
   }
 
@@ -361,6 +406,9 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
                             context.push('/edit-catch', extra: item.sourcePublishedId);
                           }
                         : null,
+                    onDeletePublished: item.fromPublished && item.sourcePublishedId != null
+                        ? () => _confirmAndDeletePublished(item.sourcePublishedId!)
+                        : null,
                   );
                 },
               ),
@@ -372,10 +420,15 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
 }
 
 class _FeedItemCard extends StatelessWidget {
-  const _FeedItemCard({required this.item, this.onEditPublished});
+  const _FeedItemCard({
+    required this.item,
+    this.onEditPublished,
+    this.onDeletePublished,
+  });
 
   final CatchFeedItem item;
   final VoidCallback? onEditPublished;
+  final VoidCallback? onDeletePublished;
 
   @override
   Widget build(BuildContext context) {
@@ -392,17 +445,50 @@ class _FeedItemCard extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    item.locationLabel,
-                    style: TextStyle(fontSize: 12, color: AppColors.onSurface.withValues(alpha: 0.7)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.locationLabel,
+                        style: TextStyle(fontSize: 12, color: AppColors.onSurface.withValues(alpha: 0.7)),
+                      ),
+                      if (item.reviewStatus.blocksEditingWhilePending) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item.reviewStatus.listLabel,
+                          style: TextStyle(fontSize: 11, color: AppColors.cyanNav.withValues(alpha: 0.85)),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                if (onEditPublished != null)
-                  TextButton(onPressed: onEditPublished, child: const Text('编辑'))
-                else if (item.reviewStatus.blocksEditingWhilePending)
-                  Text(
-                    item.reviewStatus.listLabel,
-                    style: TextStyle(fontSize: 12, color: AppColors.cyanNav.withValues(alpha: 0.85)),
+                if (onDeletePublished != null)
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.more_horiz_rounded,
+                      color: AppColors.onSurfaceVariant.withValues(alpha: 0.9),
+                    ),
+                    tooltip: '更多',
+                    padding: EdgeInsets.zero,
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        onEditPublished?.call();
+                      } else if (value == 'delete') {
+                        onDeletePublished?.call();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem<String>(
+                        value: 'edit',
+                        enabled: onEditPublished != null,
+                        child: const Text('编辑'),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text('删除', style: TextStyle(color: Colors.red.shade300)),
+                      ),
+                    ],
                   ),
               ],
             ),

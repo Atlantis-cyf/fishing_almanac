@@ -61,51 +61,60 @@ class AppBottomNav extends StatelessWidget {
                   // Pull the record circle upward so it can overflow above the
                   // bottom bar background (and remain clickable / visible).
                   top: -42,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      InkWell(
-                        onTap: () => context.push('/record'),
-                        customBorder: const CircleBorder(),
-                        child: Material(
-                          // Use an explicit Material layer to ensure the circle renders
-                          // above the bottom bar when overlapped.
-                          color: Colors.transparent,
-                          elevation: 18,
-                          shadowColor: Colors.black.withValues(alpha: 0.4),
-                          shape: const CircleBorder(),
-                          child: Ink(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF22d3ee), Color(0xFF0891b2)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primaryContainer.withValues(alpha: 0.55),
-                                  blurRadius: 28,
+                  child: Material(
+                    color: Colors.transparent,
+                    elevation: 18,
+                    shadowColor: Colors.black.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(48),
+                    clipBehavior: Clip.none,
+                    child: InkWell(
+                      onTap: () => context.push('/record'),
+                      borderRadius: BorderRadius.circular(48),
+                      // 整块（圆 +「记录」）可点；圆区 72×72 略大于视觉 64，减少边缘点不到。
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 72,
+                              height: 72,
+                              child: Center(
+                                child: Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF22d3ee), Color(0xFF0891b2)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.primaryContainer.withValues(alpha: 0.55),
+                                        blurRadius: 28,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.add, color: Color(0xFF0f172a), size: 30),
                                 ),
-                              ],
+                              ),
                             ),
-                            child: const Icon(Icons.add, color: Color(0xFF0f172a), size: 30),
-                          ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '记录',
+                              style: GoogleFonts.manrope(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                letterSpacing: 1.2,
+                                color: AppColors.cyanNav,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '记录',
-                        style: GoogleFonts.manrope(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                          letterSpacing: 1.2,
-                          color: AppColors.cyanNav,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ],
