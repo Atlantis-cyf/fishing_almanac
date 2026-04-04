@@ -1,0 +1,60 @@
+# Deploy Flutter Web to Tencent EdgeOne Pages (full Ubuntu — chmod works; EdgeOne’s own Git build does not).
+# Docs: https://pages.edgeone.ai/zh/document/use-github-actions
+#
+# GitHub → Settings → Secrets and variables → Actions:
+#   Secret:  EDGEONE_API_TOKEN   (from EdgeOne: API Token)
+#   Variable: EDGEONE_PAGES_NAME (project name in EdgeOne, e.g. fishesapp)
+#   Variable: API_BASE_URL       (optional) e.g. https://your-api.example.com
+#
+# Turn off EdgeOne “build from connected Git repo” for this project so it does not run `npm run build` (will fail).
+
+name: Deploy Flutter Web to EdgeOne Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: edgeone-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build web
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          if [ -n "$API_BASE_URL" ]; then
+            flutter build web --release --dart-define="API_BASE_URL=$API_BASE_URL"
+          else
+            flutter build web --release
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy to EdgeOne Pages
+        env:
+          EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
+        run: >
+          npx edgeone pages deploy build/web
+          -n "${{ vars.EDGEONE_PAGES_NAME }}"
+          -t "$EDGEONE_API_TOKEN"
