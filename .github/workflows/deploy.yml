@@ -1,0 +1,39 @@
+# EdgeOne Pages: https://pages.edgeone.ai/zh/document/use-github-actions
+# Flutter Web 产物目录为 build/web（非文档示例的 ./dist / ./out）。
+# GitHub → Settings → Secrets: EDGEONE_API_TOKEN
+# GitHub → Settings → Variables: EDGEONE_PAGES_NAME（与 EdgeOne 项目名称一致，对应 -n）
+# 可选 Variable: API_BASE_URL → 传入 npm run build（scripts/edgeone-pages-build.sh）
+
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.11.0"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+
+      - name: Deploy to EdgeOne Pages
+        run: npx edgeone pages deploy build/web -n "${{ vars.EDGEONE_PAGES_NAME }}" -t "${{ secrets.EDGEONE_API_TOKEN }}"
+        env:
+          EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
