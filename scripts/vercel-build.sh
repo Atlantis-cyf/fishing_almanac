@@ -1,0 +1,14 @@
+#!/bin/sh
+# Vercel build (vercel.json buildCommand length limit 256 chars).
+set -e
+export API_BASE_URL="${API_BASE_URL:-https://${VERCEL_URL}}"
+if [ -x flutter/bin/flutter ]; then
+  F=flutter/bin/flutter
+else
+  F=flutter
+fi
+$F pub get
+$F build web --release --dart-define="API_BASE_URL=$API_BASE_URL"
+rm -rf public
+mkdir -p public
+cp -r build/web/. public/
