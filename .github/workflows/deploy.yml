@@ -3,6 +3,9 @@
 # GitHub → Settings → Secrets: EDGEONE_API_TOKEN
 # GitHub → Settings → Variables: EDGEONE_PAGES_NAME（与 EdgeOne 项目名称一致，对应 -n）
 # 可选 Variable: API_BASE_URL → 传入 npm run build（scripts/edgeone-pages-build.sh）
+#
+# 若 deploy 仍失败：控制台项目需为「直接上传」类；仅 Git 构建绑定的项目可能无法用 CLI 覆盖部署。
+# API Token 须与控制台区域一致（国内站 / 国际站）。
 
 name: Build and Deploy
 
@@ -15,13 +18,15 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22.11.0"
 
@@ -33,7 +38,20 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL }}
 
+      - name: Verify build output and Pages name
+        env:
+          EDGEONE_PAGES_NAME: ${{ vars.EDGEONE_PAGES_NAME }}
+        run: |
+          ls -la build/web
+          test -f build/web/index.html || { echo "::error::Missing build/web/index.html"; exit 1; }
+          test -n "$EDGEONE_PAGES_NAME" || { echo "::error::Set repository Variable EDGEONE_PAGES_NAME (EdgeOne 项目名称)"; exit 1; }
+
+      # CLI 文档：手动构建产物目录需含 package.json（与 Pages Functions 说明一致）；Flutter 默认不生成，从根目录复制。
+      - name: Add package.json to deploy folder
+        run: cp package.json build/web/
+
       - name: Deploy to EdgeOne Pages
-        run: npx edgeone pages deploy build/web -n "${{ vars.EDGEONE_PAGES_NAME }}" -t "${{ secrets.EDGEONE_API_TOKEN }}"
         env:
           EDGEONE_API_TOKEN: ${{ secrets.EDGEONE_API_TOKEN }}
+          EDGEONE_PAGES_NAME: ${{ vars.EDGEONE_PAGES_NAME }}
+        run: npx --yes edgeone pages deploy ./build/web -n "$EDGEONE_PAGES_NAME" -e production -t "$EDGEONE_API_TOKEN"
