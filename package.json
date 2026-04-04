@@ -1,7 +1,9 @@
 {
   "name": "fishing_almanac",
   "private": true,
-  "description": "Flutter client at repo root; npm install + npm run build for EdgeOne Pages CI.",
+  "description": "Flutter client at repo root; npm install + npm run build for EdgeOne Pages CI. Workspace backend for Vercel Express bundling.",
+  "main": "server.js",
+  "workspaces": ["backend"],
   "scripts": {
     "build": "sh scripts/edgeone-pages-build.sh"
   }
