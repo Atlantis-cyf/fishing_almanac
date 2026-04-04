@@ -1,0 +1,36 @@
+name: fishing_almanac
+description: 海钓图鉴 - 深海观察员手册 Flutter 客户端
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  go_router: ^14.6.2
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.4.1
+  image_picker: ^1.1.2
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  scrollable_positioned_list: ^0.3.8
+  provider: ^6.1.2
+  shared_preferences: ^2.3.3
+  geolocator: ^13.0.2
+  dio: ^5.7.0
+  pretty_dio_logger: ^1.4.0
+  image: ^4.3.0
+  http_parser: ^4.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/species/
