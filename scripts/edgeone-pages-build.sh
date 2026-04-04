@@ -4,6 +4,15 @@ set -e
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# EdgeOne default HOME is under /dev/shm where pub cannot chmod extracted packages.
+# Keep HOME, caches, and temp inside the repo checkout so Dart/Flutter pub can set +x.
+export CI=true
+export HOME="$ROOT/.ci-home"
+export TMPDIR="$ROOT/.ci-tmp"
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_CACHE_HOME="$HOME/.cache"
+mkdir -p "$HOME" "$TMPDIR" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+
 if [ ! -d flutter-sdk ]; then
   git clone https://github.com/flutter/flutter.git -b stable --depth 1 flutter-sdk
 fi

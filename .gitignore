@@ -23,8 +23,10 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
-# CI-cloned Flutter SDK (EdgeOne Pages / local test)
+# CI-cloned Flutter SDK + sandbox-friendly HOME (EdgeOne Pages / local test)
 /flutter-sdk/
+/.ci-home/
+/.ci-tmp/
 
 # Flutter/Dart/Pub related
 **/doc/api/
