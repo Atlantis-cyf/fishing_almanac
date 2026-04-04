@@ -761,8 +761,12 @@ app.delete('/v1/catches/:id', async (req, res) => {
   return res.status(204).send();
 });
 
-app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[bff] listening on http://localhost:${PORT}`);
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`[bff] listening on http://localhost:${PORT}`);
+  });
+}
 

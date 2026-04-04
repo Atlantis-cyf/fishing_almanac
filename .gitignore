@@ -38,6 +38,9 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Vercel: Flutter web copied here at build time (see vercel.json)
+/public/
+
 # Symbolication related
 app.*.symbols
 
