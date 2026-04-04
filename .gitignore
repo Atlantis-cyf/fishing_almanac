@@ -56,7 +56,8 @@ app.*.map.json
 # Generated Supabase seed (python tool/export_species_catalog_supabase_sql.py)
 /supabase/seed/species_catalog_from_book_upsert.sql
 
-# Node (BFF)
+# Node (BFF + workspace hoist)
+/node_modules/
 backend/node_modules/
 backend/.env
 backend/.env.*
