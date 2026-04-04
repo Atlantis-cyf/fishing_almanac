@@ -1,6 +1,8 @@
 {
   "name": "fishing_almanac",
   "private": true,
-  "description": "Flutter client at repo root; this file satisfies EdgeOne Pages default npm install.",
-  "scripts": {}
+  "description": "Flutter client at repo root; npm install + npm run build for EdgeOne Pages CI.",
+  "scripts": {
+    "build": "sh scripts/edgeone-pages-build.sh"
+  }
 }
