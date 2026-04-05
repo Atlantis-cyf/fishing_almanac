@@ -71,6 +71,10 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
   /// key: `scientific_name`（与 catalog 一致），value: 渔获条数（approved）。
   Map<String, int> _myCatchCounts = const {};
 
+  /// Cross-navigation cache: survives widget rebuilds within the same session.
+  static Map<String, int>? _cachedCounts;
+  static DateTime? _cachedAt;
+
   /// 待解锁占位：三种目标的学名（与 [SpeciesCatalog] 一致）。
   static const List<String> _featuredLockedScientific = <String>[
     'Thunnus thynnus',
@@ -145,13 +149,29 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
   int get _catalogUnlockedSpeciesCount =>
       _myCatchCounts.entries.where((e) => e.value > 0).length;
 
+  static const Duration _cacheMaxAge = Duration(seconds: 30);
+
   Future<void> _loadEncyclopedia() async {
     final api = context.read<ApiClient>();
     final repo = context.read<CatchRepository>();
     final loggedIn = context.read<AuthSession>().isLoggedIn;
-    // 仅当鱼获时间线也来自远端时，图鉴计数才用 BFF；否则（默认本地仓）与首页同源，避免「首页有图、图鉴 0」。
     final useServerSpeciesCounts = loggedIn && repo.usesRemoteTimeline;
     final total = _species.length;
+
+    // Immediately show cached data (stale-while-revalidate pattern).
+    final hasFreshCache = _cachedCounts != null &&
+        _cachedAt != null &&
+        DateTime.now().difference(_cachedAt!) < _cacheMaxAge;
+
+    if (_cachedCounts != null && _myCatchCounts.isEmpty) {
+      setState(() {
+        _totalCount = total;
+        _myCatchCounts = _cachedCounts!;
+      });
+    }
+
+    if (hasFreshCache) return;
+
     final counts = <String, int>{};
     String? err;
 
@@ -196,6 +216,11 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
       } catch (e) {
         err = e.toString();
       }
+    }
+
+    if (err == null) {
+      _cachedCounts = counts;
+      _cachedAt = DateTime.now();
     }
 
     if (!mounted) return;

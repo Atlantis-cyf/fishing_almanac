@@ -17,6 +17,10 @@ import 'package:fishing_almanac/repositories/catch_repository.dart';
 import 'package:fishing_almanac/repositories/catch_timeline_cursor.dart';
 
 /// 远程列表 + multipart 发布。
+///
+/// 内置**短时缓存**（[_cacheTtl]），同一请求在 TTL 内直接返回内存数据，
+/// 页面切换（首页 ↔ 图鉴 ↔ 信息流）不再每次打网络。
+/// 发布/删除等写操作会 [_invalidateCache] 强制下次走网络。
 class RemoteCatchRepository extends CatchRepository {
   RemoteCatchRepository({
     required ApiClient api,
@@ -31,7 +35,6 @@ class RemoteCatchRepository extends CatchRepository {
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   );
 
-  /// 与 BFF 占位 `species_id` 映射一致（拉丁学名）。
   static const Map<int, String> _speciesIdToScientificName = {
     1: 'Thunnus thynnus',
     2: 'Coryphaena hippurus',
@@ -39,6 +42,18 @@ class RemoteCatchRepository extends CatchRepository {
     4: 'Anyperodon leucogrammicus',
     5: 'Morone saxatilis',
   };
+
+  // --------------- cache ---------------
+  static const Duration _cacheTtl = Duration(seconds: 30);
+
+  final Map<String, _CacheEntry<CatchFeedPage>> _pageCache = {};
+
+  String _cacheKey(String? scientificName, int? speciesId, CatchTimelineCursor? cursor) {
+    return '${scientificName ?? ''}|${speciesId ?? ''}|${cursor?.occurredAtMs ?? ''}|${cursor?.id ?? ''}|${cursor?.page ?? ''}';
+  }
+
+  void _invalidateCache() => _pageCache.clear();
+  // --------------- /cache ---------------
 
   int _mutationGen = 0;
 
@@ -49,6 +64,7 @@ class RemoteCatchRepository extends CatchRepository {
   bool get usesRemoteTimeline => true;
 
   void _bumpAfterMutation() {
+    _invalidateCache();
     _mutationGen++;
     notifyListeners();
   }
@@ -61,6 +77,10 @@ class RemoteCatchRepository extends CatchRepository {
     if (!_auth.isReady || !_auth.isLoggedIn) {
       return const CatchFeedPage(items: [], hasMore: false);
     }
+
+    final key = _cacheKey(scientificName, speciesId, cursor);
+    final cached = _pageCache[key];
+    if (cached != null && !cached.isExpired) return cached.value;
 
     final limit = CatchListEndpoints.pageSize;
     final qp = <String, dynamic>{'limit': limit};
@@ -85,6 +105,7 @@ class RemoteCatchRepository extends CatchRepository {
     final res = await _api.get<dynamic>(CatchListEndpoints.listPath, queryParameters: qp);
     var page = CatchListPageParser.parse(res.data, limit: limit);
     page = _syntheticPageCursor(page, cursor);
+    _pageCache[key] = _CacheEntry(page);
     return page;
   }
 
@@ -200,4 +221,12 @@ class RemoteCatchRepository extends CatchRepository {
     await _api.delete<dynamic>(CatchPublishEndpoints.updatePath(trimmed));
     _bumpAfterMutation();
   }
+}
+
+class _CacheEntry<T> {
+  _CacheEntry(this.value) : _created = DateTime.now();
+  final T value;
+  final DateTime _created;
+  bool get isExpired =>
+      DateTime.now().difference(_created) > RemoteCatchRepository._cacheTtl;
 }
