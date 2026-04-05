@@ -50,6 +50,10 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
   final ItemScrollController _scrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
 
+  /// Web：不用 [ScrollablePositionedList]（`scrollTo` 易导致视口空白）；用 [ListView] + [Scrollable.ensureVisible]。
+  ScrollController? _webScrollController;
+  final Map<int, GlobalKey> _webItemKeys = {};
+
   FeedDetailLoadPhase _phase = FeedDetailLoadPhase.loading;
   String? _errorMessage;
   final List<CatchFeedItem> _items = [];
@@ -57,6 +61,8 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
   bool _hasMore = false;
   bool _loadingMore = false;
   bool _didInitialScroll = false;
+  /// Web：程序化滚到某条时暂不触发「接近底部 → loadMore」，避免与定位同一时段的 setState 抢布局。
+  bool _webSuppressEndScrollLoad = false;
 
   int _loadToken = 0;
   String _reloadKey = '';
@@ -64,12 +70,19 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _itemPositionsListener.itemPositions.addListener(_onItemPositionsChanged);
+    if (kIsWeb) {
+      _webScrollController = ScrollController();
+    } else {
+      _itemPositionsListener.itemPositions.addListener(_onItemPositionsChanged);
+    }
   }
 
   @override
   void dispose() {
-    _itemPositionsListener.itemPositions.removeListener(_onItemPositionsChanged);
+    if (!kIsWeb) {
+      _itemPositionsListener.itemPositions.removeListener(_onItemPositionsChanged);
+    }
+    _webScrollController?.dispose();
     super.dispose();
   }
 
@@ -132,6 +145,22 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
     }
   }
 
+  bool _onWebScrollNotification(ScrollNotification n) {
+    if (_webSuppressEndScrollLoad) return false;
+    if (!_hasMore || _loadingMore || _phase != FeedDetailLoadPhase.success) return false;
+    if (!context.read<CatchRepository>().usesRemoteTimeline) return false;
+    if (n.metrics.axis != Axis.vertical) return false;
+    final m = n.metrics;
+    if (m.maxScrollExtent <= 0) return false;
+    if (m.pixels >= m.maxScrollExtent - 520) {
+      unawaited(_loadMore());
+    }
+    return false;
+  }
+
+  GlobalKey _webKeyForIndex(int index) =>
+      _webItemKeys.putIfAbsent(index, GlobalKey.new);
+
   void _onItemPositionsChanged() {
     if (!_hasMore || _loadingMore || _phase != FeedDetailLoadPhase.success) return;
     final positions = _itemPositionsListener.itemPositions.value;
@@ -168,10 +197,12 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
       _phase = FeedDetailLoadPhase.loading;
       _errorMessage = null;
       _items.clear();
+      _webItemKeys.clear();
       _nextCursor = null;
       _hasMore = false;
       _loadingMore = false;
       _didInitialScroll = false;
+      _webSuppressEndScrollLoad = false;
     });
 
     final repo = context.read<CatchRepository>();
@@ -222,6 +253,10 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
   void _scheduleInitialScroll() {
     if (_items.isEmpty || _didInitialScroll) return;
     final target = _resolveScrollTargetIndex(_items);
+    if (kIsWeb) {
+      _scheduleInitialScrollWeb(target);
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       void scrollOnce() {
@@ -249,6 +284,61 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
         });
       });
     });
+  }
+
+  /// 单列卡片大致高度（懒加载前用于把 [ScrollController] 先跳到目标附近）。
+  double _estimateFeedItemExtent(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    return w + 240;
+  }
+
+  /// Web：用 [ListView] + 粗估 [jumpTo] + [Scrollable.ensureVisible] 对齐到点击的照片。
+  /// 完成滚动后**不要**再 `setState` 只改 `_didInitialScroll`，否则会重建列表，在 Web 上常出现「闪一下正确位置后整段空白」。
+  void _scheduleInitialScrollWeb(int target) {
+    if (target <= 0) {
+      _didInitialScroll = true;
+      return;
+    }
+    var waitFrames = 0;
+    void afterListReady(Duration _) {
+      if (!mounted) return;
+      final ctrl = _webScrollController;
+      if (ctrl == null || !ctrl.hasClients) {
+        if (waitFrames++ < 40) {
+          WidgetsBinding.instance.addPostFrameCallback(afterListReady);
+        } else {
+          _didInitialScroll = true;
+        }
+        return;
+      }
+      final maxExt = ctrl.position.maxScrollExtent;
+      final rough = (target * _estimateFeedItemExtent(context)).clamp(0.0, maxExt);
+      _webSuppressEndScrollLoad = true;
+      ctrl.jumpTo(rough);
+      WidgetsBinding.instance.addPostFrameCallback((Duration __) {
+        if (!mounted) return;
+        try {
+          final ctx = _webKeyForIndex(target).currentContext;
+          if (ctx != null) {
+            try {
+              Scrollable.ensureVisible(
+                ctx,
+                alignment: 0,
+                duration: Duration.zero,
+                curve: Curves.linear,
+              );
+            } catch (e, st) {
+              debugPrint('FeedDetailScreen web ensureVisible failed: $e\n$st');
+            }
+          }
+        } finally {
+          _webSuppressEndScrollLoad = false;
+          _didInitialScroll = true;
+        }
+      });
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(afterListReady);
   }
 
   Future<void> _loadMore() async {
@@ -286,6 +376,26 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
     _loadToken++;
     final t = _loadToken;
     await _runInitialLoad(t);
+  }
+
+  Widget _feedItemCard(BuildContext context, CatchFeedItem item) {
+    return _FeedItemCard(
+      item: item,
+      onEditPublished: item.fromPublished &&
+              item.sourcePublishedId != null &&
+              !item.reviewStatus.blocksEditingWhilePending
+          ? () async {
+              final r = context.read<CatchRepository>();
+              final p = await r.getById(item.sourcePublishedId!);
+              if (!context.mounted || p == null) return;
+              context.read<CatchDraft>().loadFromPublished(p);
+              context.push('/edit-catch', extra: item.sourcePublishedId);
+            }
+          : null,
+      onDeletePublished: item.fromPublished && item.sourcePublishedId != null
+          ? () => _confirmAndDeletePublished(item.sourcePublishedId!)
+          : null,
+    );
   }
 
   @override
@@ -371,15 +481,47 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
         final extra = (_hasMore && context.read<CatchRepository>().usesRemoteTimeline) ? 1 : 0;
         final count = _items.length + extra;
         final scrollTargetIndex = _resolveScrollTargetIndex(_items).clamp(0, count > 0 ? count - 1 : 0);
+        if (kIsWeb) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: _onWebScrollNotification,
+                  child: ListView.builder(
+                    controller: _webScrollController,
+                    padding: const EdgeInsets.only(bottom: 100),
+                    itemCount: count,
+                    itemBuilder: (context, index) {
+                      if (index >= _items.length) {
+                        return Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Center(
+                            child: _loadingMore
+                                ? const CircularProgressIndicator()
+                                : const SizedBox.shrink(),
+                          ),
+                        );
+                      }
+                      final item = _items[index];
+                      return KeyedSubtree(
+                        key: _webKeyForIndex(index),
+                        child: _feedItemCard(context, item),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               child: ScrollablePositionedList.builder(
                 padding: const EdgeInsets.only(bottom: 100),
-                // Web: non-zero initialScrollIndex after async load is a known source of blank viewport
-                // (see google/flutter.widgets#418 / #545). Start at 0 and rely on [_scheduleInitialScroll].
-                initialScrollIndex: kIsWeb ? 0 : scrollTargetIndex,
+                initialScrollIndex: scrollTargetIndex,
                 initialAlignment: 0,
                 itemCount: count,
                 itemScrollController: _scrollController,
@@ -396,23 +538,7 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
                     );
                   }
                   final item = _items[index];
-                  return _FeedItemCard(
-                    item: item,
-                    onEditPublished: item.fromPublished &&
-                            item.sourcePublishedId != null &&
-                            !item.reviewStatus.blocksEditingWhilePending
-                        ? () async {
-                            final r = context.read<CatchRepository>();
-                            final p = await r.getById(item.sourcePublishedId!);
-                            if (!context.mounted || p == null) return;
-                            context.read<CatchDraft>().loadFromPublished(p);
-                            context.push('/edit-catch', extra: item.sourcePublishedId);
-                          }
-                        : null,
-                    onDeletePublished: item.fromPublished && item.sourcePublishedId != null
-                        ? () => _confirmAndDeletePublished(item.sourcePublishedId!)
-                        : null,
-                  );
+                  return _feedItemCard(context, item);
                 },
               ),
             ),
