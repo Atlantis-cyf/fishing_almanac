@@ -58,9 +58,13 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY env vars');
-}
+const missingSupabase =
+  !SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY;
+
+if (!(missingSupabase && process.env.VERCEL)) {
+  if (missingSupabase) {
+    throw new Error('Missing SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY env vars');
+  }
 
 const IMAGE_FIELD = process.env.CATCH_IMAGE_FIELD || 'image';
 const STORE_IMAGE_BASE64 = (process.env.STORE_IMAGE_BASE64 || 'true').toLowerCase() === 'true';
@@ -797,6 +801,24 @@ app.delete('/v1/catches/:id', async (req, res) => {
 
   return res.status(204).send();
 });
+
+} else {
+  app.get('/healthz', (_req, res) =>
+    res.status(503).json({
+      ok: false,
+      error: 'missing_supabase_env',
+      hint:
+        'Vercel → Settings → Environment Variables：为 Preview 与 Production 添加 SUPABASE_URL、SUPABASE_ANON_KEY、SUPABASE_SERVICE_ROLE_KEY。勿写成 SUPABASE_UR；URL 须以 https:// 开头。保存后 Redeploy。',
+    }),
+  );
+  app.use((_req, res) =>
+    res.status(503).json({
+      ok: false,
+      error: 'missing_supabase_env',
+      message: 'BFF 未配置 Supabase 环境变量',
+    }),
+  );
+}
 
 module.exports = app;
 
