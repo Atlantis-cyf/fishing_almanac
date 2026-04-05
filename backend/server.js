@@ -8,6 +8,43 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
+// Vercel rewrites send traffic to /api/server; restore the browser path for Express routing.
+if (process.env.VERCEL) {
+  app.use((req, _res, next) => {
+    const h = req.headers;
+    const candidates = [
+      h['x-matched-path'],
+      h['x-invoke-path'],
+      h['x-vercel-original-path'],
+      h['x-forwarded-uri'],
+    ];
+    for (const raw of candidates) {
+      if (typeof raw !== 'string' || !raw.startsWith('/')) continue;
+      let pathWithQuery = raw;
+      try {
+        if (raw.startsWith('http')) {
+          const u = new URL(raw);
+          pathWithQuery = u.pathname + u.search;
+        }
+      } catch (_) {
+        continue;
+      }
+      if (
+        pathWithQuery === '/healthz' ||
+        pathWithQuery.startsWith('/healthz?') ||
+        pathWithQuery.startsWith('/auth/') ||
+        pathWithQuery === '/me' ||
+        pathWithQuery.startsWith('/me?') ||
+        pathWithQuery.startsWith('/v1/')
+      ) {
+        req.url = pathWithQuery;
+        break;
+      }
+    }
+    next();
+  });
+}
+
 app.use(
   cors({
     origin: true,

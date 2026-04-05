@@ -1,5 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install",
-  "buildCommand": "sh scripts/vercel-build.sh"
+  "buildCommand": "sh scripts/vercel-build.sh",
+  "outputDirectory": "build/web",
+  "rewrites": [
+    { "source": "/healthz", "destination": "/api/server" },
+    { "source": "/auth/:path*", "destination": "/api/server" },
+    { "source": "/me", "destination": "/api/server" },
+    { "source": "/v1/:path*", "destination": "/api/server" },
+    { "source": "/:path*", "destination": "/index.html" }
+  ]
 }
