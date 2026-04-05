@@ -10,8 +10,9 @@ else
   F=flutter
 fi
 $F pub get
+# Match full-stack behavior: fish feed & species ID must hit the BFF (not browser-only LocalCatchRepository).
+WEB_DEFINES='--dart-define=USE_REMOTE_CATCH_REPOSITORY=true --dart-define=USE_REMOTE_SPECIES_IDENTIFICATION=true'
 if [ -n "${API_BASE_URL:-}" ]; then
-  $F build web --release --dart-define="API_BASE_URL=$API_BASE_URL"
-else
-  $F build web --release
+  WEB_DEFINES="$WEB_DEFINES --dart-define=API_BASE_URL=$API_BASE_URL"
 fi
+$F build web --release $WEB_DEFINES

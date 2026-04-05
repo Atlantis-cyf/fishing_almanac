@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -376,7 +377,9 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
             Expanded(
               child: ScrollablePositionedList.builder(
                 padding: const EdgeInsets.only(bottom: 100),
-                initialScrollIndex: scrollTargetIndex,
+                // Web: non-zero initialScrollIndex after async load is a known source of blank viewport
+                // (see google/flutter.widgets#418 / #545). Start at 0 and rely on [_scheduleInitialScroll].
+                initialScrollIndex: kIsWeb ? 0 : scrollTargetIndex,
                 initialAlignment: 0,
                 itemCount: count,
                 itemScrollController: _scrollController,
