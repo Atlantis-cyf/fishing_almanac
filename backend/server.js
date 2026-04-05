@@ -68,6 +68,39 @@ if (!(missingSupabase && process.env.VERCEL)) {
 
 const IMAGE_FIELD = process.env.CATCH_IMAGE_FIELD || 'image';
 const STORE_IMAGE_BASE64 = (process.env.STORE_IMAGE_BASE64 || 'true').toLowerCase() === 'true';
+const STORAGE_BUCKET = process.env.CATCH_IMAGE_BUCKET || 'catch-images';
+
+/**
+ * Upload an image buffer to Supabase Storage and return its public URL.
+ * Path: `catches/{userId}/{catchId}.jpg`
+ * If the bucket doesn't exist yet, tries to create it once (public, 5 MB limit).
+ */
+let _bucketEnsured = false;
+async function ensureBucket() {
+  if (_bucketEnsured) return;
+  const { error } = await supabaseAdmin.storage.createBucket(STORAGE_BUCKET, {
+    public: true,
+    fileSizeLimit: 5 * 1024 * 1024,
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  });
+  if (error && !String(error.message || '').includes('already exists')) {
+    console.error('[storage] createBucket error (non-fatal):', error.message);
+  }
+  _bucketEnsured = true;
+}
+
+async function uploadImageToStorage(buffer, userId, catchId) {
+  await ensureBucket();
+  const path = `catches/${userId}/${catchId}.jpg`;
+  const { error } = await supabaseAdmin.storage
+    .from(STORAGE_BUCKET)
+    .upload(path, buffer, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+  const { data: urlData } = supabaseAdmin.storage
+    .from(STORAGE_BUCKET)
+    .getPublicUrl(path);
+  return urlData?.publicUrl || null;
+}
 
 const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -680,6 +713,19 @@ app.post('/v1/catches', upload.single(IMAGE_FIELD), async (req, res) => {
     .single();
 
   const { data, error } = ins;
+
+  // Upload image to Storage and persist the public URL (best-effort; don't fail the whole request).
+  if (!error && data && file) {
+    try {
+      const publicUrl = await uploadImageToStorage(file.buffer, user.id, data.id);
+      if (publicUrl) {
+        await supabaseAdmin.from('catches').update({ image_url: publicUrl }).eq('id', data.id);
+        data.image_url = publicUrl;
+      }
+    } catch (storageErr) {
+      console.error('[storage] post-insert upload failed (non-fatal):', storageErr.message);
+    }
+  }
   if (error) {
     if (isSpeciesCatalogFkViolation(error)) {
       return jsonError(
@@ -740,7 +786,14 @@ app.put('/v1/catches/:id', upload.single(IMAGE_FIELD), async (req, res) => {
   // Only mutate image fields when a new file is provided.
   if (file) {
     payload.image_base64 = STORE_IMAGE_BASE64 ? file.buffer.toString('base64') : null;
-    payload.image_url = null;
+    // Upload to Storage; URL written into payload before the DB update.
+    try {
+      const publicUrl = await uploadImageToStorage(file.buffer, user.id, id);
+      payload.image_url = publicUrl;
+    } catch (storageErr) {
+      console.error('[storage] put upload failed (non-fatal):', storageErr.message);
+      payload.image_url = null;
+    }
   }
 
   const { data, error } = await supabaseAdmin
@@ -781,6 +834,39 @@ app.put('/v1/catches/:id', upload.single(IMAGE_FIELD), async (req, res) => {
   if (!data) return jsonError(res, 404, '未找到该鱼获记录');
 
   return res.json(normalizeCatchRow(data));
+});
+
+// One-time migration: upload existing base64 images to Storage and set image_url.
+// Call: POST /v1/catches/migrate-images  (requires auth; processes only the caller's catches)
+app.post('/v1/catches/migrate-images', async (req, res) => {
+  const user = await requireUser(req);
+  if (!user) return jsonError(res, 401, '请先登录');
+
+  const { data: rows, error } = await supabaseAdmin
+    .from('catches')
+    .select('id, image_base64')
+    .eq('user_id', user.id)
+    .is('image_url', null)
+    .not('image_base64', 'is', null)
+    .limit(200);
+
+  if (error) return jsonError(res, 500, '读取待迁移记录失败', String(error.message || error));
+  if (!rows || rows.length === 0) return res.json({ migrated: 0 });
+
+  let migrated = 0;
+  for (const row of rows) {
+    try {
+      const buf = Buffer.from(row.image_base64, 'base64');
+      const publicUrl = await uploadImageToStorage(buf, user.id, row.id);
+      if (publicUrl) {
+        await supabaseAdmin.from('catches').update({ image_url: publicUrl }).eq('id', row.id);
+        migrated++;
+      }
+    } catch (e) {
+      console.error(`[migrate] catch ${row.id} failed:`, e.message);
+    }
+  }
+  return res.json({ migrated, total: rows.length });
 });
 
 app.delete('/v1/catches/:id', async (req, res) => {
