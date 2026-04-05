@@ -451,6 +451,23 @@ app.post('/v1/species/identify', async (req, res) => {
 // -----------------------
 // Catches
 // -----------------------
+// 列表不查 image_base64：库内可能存大图 Base64，随列表返回会导致 JSON 数 MB、移动端解析/解码秒级卡顿。
+// 缩略图用 image_url（CDN）；编辑详情若需原图可后续加 GET /v1/catches/:id。
+const CATCH_LIST_SELECT = `
+  id,
+  image_url,
+  scientific_name,
+  notes,
+  weight_kg,
+  length_cm,
+  location_label,
+  lat,
+  lng,
+  occurred_at,
+  occurred_at_ms,
+  review_status
+`;
+
 app.get('/v1/catches', async (req, res) => {
   const user = await requireUser(req);
   if (!user) return jsonError(res, 401, '请先登录');
@@ -474,23 +491,7 @@ app.get('/v1/catches', async (req, res) => {
   try {
     let query = supabaseAdmin
       .from('catches')
-      .select(
-        `
-        id,
-        image_base64,
-        image_url,
-        scientific_name,
-        notes,
-        weight_kg,
-        length_cm,
-        location_label,
-        lat,
-        lng,
-        occurred_at,
-        occurred_at_ms,
-        review_status
-      `
-      )
+      .select(CATCH_LIST_SELECT)
       .eq('user_id', user.id)
       .eq('review_status', 'approved');
 

@@ -47,10 +47,17 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
     if (repo.dataGeneration != _lastGen || widget.speciesScientificName != _lastScientific) {
       _lastGen = repo.dataGeneration;
       _lastScientific = widget.speciesScientificName;
-      _detailFuture = Future.wait([
-        repo.userPhotosForSpecies(widget.speciesScientificName),
-        repo.timelineForSpecies(widget.speciesScientificName).then((p) => p.items),
-      ]);
+      // 远端：userPhotosForSpecies 与 timelineForSpecies 均走同一 GET /v1/catches，避免并行重复请求（双倍延迟与流量）。
+      if (repo.usesRemoteTimeline) {
+        _detailFuture = repo
+            .timelineForSpecies(widget.speciesScientificName)
+            .then((p) => <List<CatchFeedItem>>[p.items, p.items]);
+      } else {
+        _detailFuture = Future.wait([
+          repo.userPhotosForSpecies(widget.speciesScientificName),
+          repo.timelineForSpecies(widget.speciesScientificName).then((p) => p.items),
+        ]);
+      }
     }
 
     final entry = SpeciesCatalog.byScientificName(widget.speciesScientificName);
