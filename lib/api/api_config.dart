@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'api_loopback_rewriter_stub.dart'
     if (dart.library.io) 'api_loopback_rewriter_io.dart' as loopback;
 
@@ -8,7 +10,7 @@ import 'api_loopback_rewriter_stub.dart'
 /// flutter run --dart-define=API_BASE_URL=https://api.example.com
 /// ```
 ///
-/// 未设置时默认本地占位，避免误连生产。
+/// Web 未设置时默认 [Uri.base.origin]（与当前页面同源，适配 Vercel 多域名）；其它平台默认本地占位。
 ///
 /// **Android 模拟器**：若基址为 `127.0.0.1` 或 `localhost`，会自动改为 `10.0.2.2`，
 /// 否则请求会打到模拟器自身导致超时。真机请显式传入电脑局域网 IP。
@@ -20,7 +22,9 @@ abstract final class ApiConfig {
   /// 在 Android 上对环回主机名做模拟器友好改写。
   static String get baseUrl {
     const fromDefine = String.fromEnvironment(_defineKey);
-    final raw = fromDefine.isNotEmpty ? fromDefine : defaultBaseUrl;
+    final raw = fromDefine.isNotEmpty
+        ? fromDefine
+        : (kIsWeb ? Uri.base.origin : defaultBaseUrl);
     return loopback.applyAndroidEmulatorLoopbackRewrite(_trimTrailingSlash(raw));
   }
 
