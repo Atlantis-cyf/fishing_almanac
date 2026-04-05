@@ -34,3 +34,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/species/
+    - assets/fonts/
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-VariableFont_wght.ttf
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-VariableFont_opsz_wght.ttf
