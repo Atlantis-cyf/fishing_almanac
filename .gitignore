@@ -25,6 +25,7 @@ migrate_working_dir/
 
 # CI-cloned Flutter SDK + sandbox-friendly HOME (EdgeOne Pages / local test)
 /flutter-sdk/
+/flutter/
 /.ci-home/
 /.ci-tmp/
 

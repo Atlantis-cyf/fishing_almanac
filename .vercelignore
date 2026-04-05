@@ -1,0 +1,10 @@
+# Smaller upload / clone context for Vercel (Git + CLI). Not a substitute for .gitignore.
+android
+ios
+linux
+macos
+windows
+test
+integration_test
+.dart_tool
+**/doc/api
