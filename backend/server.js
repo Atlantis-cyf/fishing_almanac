@@ -69,24 +69,24 @@ if (!(missingSupabase && process.env.VERCEL)) {
 const IMAGE_FIELD = process.env.CATCH_IMAGE_FIELD || 'image';
 const STORE_IMAGE_BASE64 = (process.env.STORE_IMAGE_BASE64 || 'true').toLowerCase() === 'true';
 const STORAGE_BUCKET = process.env.CATCH_IMAGE_BUCKET || 'catch-images';
+const SPECIES_IMAGE_BUCKET = process.env.SPECIES_IMAGE_BUCKET || 'species-images';
 
-/**
- * Upload an image buffer to Supabase Storage and return its public URL.
- * Path: `catches/{userId}/{catchId}.jpg`
- * If the bucket doesn't exist yet, tries to create it once (public, 5 MB limit).
- */
-let _bucketEnsured = false;
-async function ensureBucket() {
-  if (_bucketEnsured) return;
-  const { error } = await supabaseAdmin.storage.createBucket(STORAGE_BUCKET, {
+const _bucketEnsuredSet = new Set();
+async function ensureBucketByName(bucketName, opts) {
+  if (_bucketEnsuredSet.has(bucketName)) return;
+  const { error } = await supabaseAdmin.storage.createBucket(bucketName, opts || {
     public: true,
     fileSizeLimit: 5 * 1024 * 1024,
     allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
   });
   if (error && !String(error.message || '').includes('already exists')) {
-    console.error('[storage] createBucket error (non-fatal):', error.message);
+    console.error(`[storage] createBucket(${bucketName}) error (non-fatal):`, error.message);
   }
-  _bucketEnsured = true;
+  _bucketEnsuredSet.add(bucketName);
+}
+
+async function ensureBucket() {
+  return ensureBucketByName(STORAGE_BUCKET);
 }
 
 async function uploadImageToStorage(buffer, userId, catchId) {
@@ -98,6 +98,20 @@ async function uploadImageToStorage(buffer, userId, catchId) {
   if (error) throw new Error(`Storage upload failed: ${error.message}`);
   const { data: urlData } = supabaseAdmin.storage
     .from(STORAGE_BUCKET)
+    .getPublicUrl(path);
+  return urlData?.publicUrl || null;
+}
+
+async function uploadSpeciesImage(buffer, scientificName) {
+  await ensureBucketByName(SPECIES_IMAGE_BUCKET);
+  const safeName = scientificName.replace(/[^a-zA-Z0-9_.-]/g, '_').substring(0, 80);
+  const path = `species/${safeName}_${Date.now()}.jpg`;
+  const { error } = await supabaseAdmin.storage
+    .from(SPECIES_IMAGE_BUCKET)
+    .upload(path, buffer, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw new Error(`Species image upload failed: ${error.message}`);
+  const { data: urlData } = supabaseAdmin.storage
+    .from(SPECIES_IMAGE_BUCKET)
     .getPublicUrl(path);
   return urlData?.publicUrl || null;
 }
@@ -166,6 +180,10 @@ function isSpeciesCatalogFkViolation(error) {
     msg.includes('catches_scientific_name_fkey') ||
     msg.includes('catches_species_zh_fkey')
   );
+}
+
+function normalizeScientificNameKey(raw) {
+  return String(raw || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 function normalizeCatchRow(row) {
@@ -471,7 +489,19 @@ app.patch('/me', async (req, res) => {
 // Species identify (Doubao Vision API)
 // -----------------------
 const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY;
-const DOUBAO_MODEL_ID = process.env.DOUBAO_MODEL_ID || process.env.ARK_MODEL_ID || 'doubao-seed-1-6-vision-250815';
+
+/** Ark 控制台展示名常为 Doubao-Seed-1.6-vision；API 要求 doubao-seed-1-6-vision（小写 + 1-6 非 1.6）。 */
+function normalizeDoubaoModelId(raw) {
+  if (raw == null) return raw;
+  let s = String(raw).trim();
+  if (!s) return s;
+  s = s.replace(/seed-1\.6-vision/gi, 'seed-1-6-vision');
+  return s.toLowerCase();
+}
+
+const DOUBAO_MODEL_ID = normalizeDoubaoModelId(
+  process.env.DOUBAO_MODEL_ID || process.env.ARK_MODEL_ID || 'doubao-seed-1-6-vision-250815',
+);
 const DOUBAO_API_BASE = process.env.DOUBAO_API_BASE || 'https://ark.cn-beijing.volces.com/api/v3';
 
 app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
@@ -513,16 +543,17 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
       input: [
         {
           role: 'system',
-          content: '你是一个专业的鱼类识别专家。用户会上传一张鱼的照片，请识别图中鱼的种类。' +
+          content: '你是一个专业的鱼类识别专家。用户会上传一张照片，请判断图中是否有鱼，并尝试识别鱼的种类。' +
             '只返回一个JSON对象，不要包含任何其他文字、markdown标记或代码块。' +
-            'JSON格式: {"species_zh":"中文名","scientific_name":"拉丁学名"}' +
-            '如果无法识别，返回: {"species_zh":"未确定","scientific_name":"Indeterminate"}',
+            'JSON格式: {"is_fish":true,"species_zh":"中文名","scientific_name":"拉丁学名","taxonomy_zh":"纲·目·科（如 硬骨鱼纲·鲈形目·鲭科）"}' +
+            '如果图中没有鱼（如猫、狗、人、风景等），返回: {"is_fish":false,"species_zh":"","scientific_name":"","taxonomy_zh":""}' +
+            '如果有鱼但无法确定种类，返回: {"is_fish":true,"species_zh":"未确定","scientific_name":"Indeterminate","taxonomy_zh":""}',
         },
         {
           role: 'user',
           content: [
             ...imageContent,
-            { type: 'input_text', text: '请识别这张图片中的鱼种，返回JSON。' },
+            { type: 'input_text', text: '请判断图中是否有鱼，如果有请识别鱼种，返回JSON。' },
           ],
         },
       ],
@@ -564,21 +595,25 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
       rawContent = (apiData.choices[0].message && apiData.choices[0].message.content) || '';
     }
 
+    let isFish = true;
     let speciesZh = '未确定';
     let scientificName = 'Indeterminate';
+    let taxonomyZh = '';
 
     const jsonMatch = rawContent.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.is_fish === false) isFish = false;
         if (parsed.species_zh) speciesZh = String(parsed.species_zh).trim();
         if (parsed.scientific_name) scientificName = String(parsed.scientific_name).trim();
+        if (parsed.taxonomy_zh) taxonomyZh = String(parsed.taxonomy_zh).trim();
       } catch (_) {
         console.warn('[identify] Failed to parse JSON from model response:', rawContent.slice(0, 300));
       }
     }
 
-    if (speciesZh !== '未确定' && scientificName === 'Indeterminate') {
+    if (isFish && speciesZh !== '未确定' && scientificName === 'Indeterminate') {
       const { data: catalogRow } = await supabaseAdmin
         .from('species_catalog')
         .select('scientific_name')
@@ -586,7 +621,7 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
         .maybeSingle();
       if (catalogRow) scientificName = catalogRow.scientific_name;
     }
-    if (scientificName !== 'Indeterminate' && speciesZh === '未确定') {
+    if (isFish && scientificName !== 'Indeterminate' && speciesZh === '未确定') {
       const { data: catalogRow } = await supabaseAdmin
         .from('species_catalog')
         .select('species_zh')
@@ -595,12 +630,44 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
       if (catalogRow) speciesZh = catalogRow.species_zh;
     }
 
-    const confidence = +(0.85 + Math.random() * 0.14).toFixed(2);
+    const confidence = isFish ? +(0.85 + Math.random() * 0.14).toFixed(2) : 0;
+
+    const user = await requireUser(req);
+
+    // Log identification result (best-effort, don't fail the request)
+    try {
+      await supabaseAdmin.from('species_identify_logs').insert({
+        user_id: user?.id ?? null,
+        is_fish: isFish,
+        species_zh: isFish ? speciesZh : null,
+        scientific_name: isFish ? scientificName : null,
+        confidence: isFish ? confidence : 0,
+        raw_label: rawContent.slice(0, 500),
+        model_engine: 'doubao',
+        model_id: DOUBAO_MODEL_ID,
+      });
+    } catch (logErr) {
+      console.warn('[identify] log insert failed (non-fatal):', logErr.message);
+    }
+
+    // Check if species exists in catalog
+    let inCatalog = false;
+    if (isFish && scientificName !== 'Indeterminate') {
+      const { data: existing } = await supabaseAdmin
+        .from('species_catalog')
+        .select('id')
+        .eq('scientific_name', scientificName)
+        .maybeSingle();
+      inCatalog = !!existing;
+    }
 
     return res.json({
+      is_fish: isFish,
       scientific_name: scientificName,
       species_zh: speciesZh,
+      taxonomy_zh: taxonomyZh,
       confidence,
+      in_catalog: inCatalog,
       raw_label: rawContent.slice(0, 200),
       metadata: {
         engine: 'doubao',
@@ -611,6 +678,113 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
   } catch (err) {
     console.error('[identify] error:', err);
     return jsonError(res, 500, '鱼种识别失败', String(err.message || err));
+  }
+});
+
+// -----------------------
+// Species Catalog (server-driven)
+// -----------------------
+
+app.get('/v1/species/catalog', async (req, res) => {
+  try {
+    const statusFilter = req.query.status || 'approved';
+    let query = supabaseAdmin
+      .from('species_catalog')
+      .select('id, species_zh, scientific_name, taxonomy_zh, is_rare, image_url, max_length_m, max_weight_kg, description_zh, name_en, encyclopedia_category, rarity_display, alias_zh, source, status, contributed_by, contributed_image_url, created_at')
+      .order('id', { ascending: true });
+
+    if (statusFilter !== 'all') {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data, error } = await query;
+    if (error) return jsonError(res, 500, '获取物种目录失败', String(error.message || error));
+
+    return res.json({
+      species: data || [],
+      total: (data || []).length,
+    });
+  } catch (e) {
+    return jsonError(res, 500, '获取物种目录失败', String(e?.message || e));
+  }
+});
+
+app.post('/v1/species/catalog', upload.single('image'), async (req, res) => {
+  const user = await requireUser(req);
+  if (!user) return jsonError(res, 401, '请先登录');
+
+  const body = req.body || {};
+  const scientificName = String(body.scientific_name || '').trim();
+  const speciesZh = String(body.species_zh || '').trim();
+  const taxonomyZh = String(body.taxonomy_zh || '').trim();
+  const imageAuthorized = body.image_authorized === 'true' || body.image_authorized === true;
+
+  if (!scientificName || scientificName === 'Indeterminate') {
+    return jsonError(res, 400, '缺少有效的物种学名');
+  }
+  if (!speciesZh || speciesZh === '未确定') {
+    return jsonError(res, 400, '缺少有效的物种中文名');
+  }
+
+  try {
+    // Check if species already exists (by scientific_name)
+    const { data: existing } = await supabaseAdmin
+      .from('species_catalog')
+      .select('id, species_zh, scientific_name, status, source')
+      .eq('scientific_name', scientificName)
+      .maybeSingle();
+
+    if (existing) {
+      return res.json({ species: existing, created: false });
+    }
+
+    // Upload species image if authorized and provided
+    let contributedImageUrl = null;
+    if (imageAuthorized && req.file) {
+      try {
+        contributedImageUrl = await uploadSpeciesImage(req.file.buffer, scientificName);
+      } catch (imgErr) {
+        console.warn('[species/catalog] image upload failed (non-fatal):', imgErr.message);
+      }
+    }
+
+    const newRow = {
+      species_zh: speciesZh,
+      scientific_name: scientificName,
+      taxonomy_zh: taxonomyZh || '',
+      is_rare: false,
+      image_url: contributedImageUrl || 'assets/species/placeholder.jpg',
+      max_length_m: 0,
+      max_weight_kg: 0,
+      description_zh: '',
+      source: 'user_contributed',
+      status: 'pending',
+      contributed_by: user.id,
+      contributed_image_url: contributedImageUrl,
+    };
+
+    const { data: inserted, error: insertErr } = await supabaseAdmin
+      .from('species_catalog')
+      .upsert(newRow, { onConflict: 'scientific_name' })
+      .select('id, species_zh, scientific_name, status, source, contributed_image_url')
+      .single();
+
+    if (insertErr) {
+      // Might be a unique constraint on species_zh or concurrent insert
+      if (String(insertErr.code) === '23505') {
+        const { data: fallback } = await supabaseAdmin
+          .from('species_catalog')
+          .select('id, species_zh, scientific_name, status, source')
+          .eq('scientific_name', scientificName)
+          .maybeSingle();
+        if (fallback) return res.json({ species: fallback, created: false });
+      }
+      return jsonError(res, 500, '创建物种失败', String(insertErr.message || insertErr));
+    }
+
+    return res.json({ species: inserted, created: true });
+  } catch (e) {
+    return jsonError(res, 500, '创建物种失败', String(e?.message || e));
   }
 });
 
@@ -822,6 +996,49 @@ app.post('/v1/catches', upload.single(IMAGE_FIELD), async (req, res) => {
 
   if (!payload.scientific_name) return jsonError(res, 400, '鱼种不能为空');
   if (!file && !imageBase64) return jsonError(res, 400, '请先上传照片再发布');
+
+  // Auto-upsert species if not in catalog (prevents FK violation for AI-discovered species)
+  if (isIdentifiedScientificName(payload.scientific_name)) {
+    const { data: catRow } = await supabaseAdmin
+      .from('species_catalog')
+      .select('id')
+      .eq('scientific_name', payload.scientific_name)
+      .maybeSingle();
+
+    if (!catRow) {
+      const speciesZhFromBody = String(body.species_zh || body.speciesZh || '').trim();
+      const taxonomyZhFromBody = String(body.taxonomy_zh || body.taxonomyZh || '').trim();
+      const imageAuthorized = body.image_authorized === 'true' || body.image_authorized === true;
+
+      let contributedImageUrl = null;
+      if (imageAuthorized && file) {
+        try {
+          contributedImageUrl = await uploadSpeciesImage(file.buffer, payload.scientific_name);
+        } catch (imgErr) {
+          console.warn('[catches] species image upload failed (non-fatal):', imgErr.message);
+        }
+      }
+
+      try {
+        await supabaseAdmin.from('species_catalog').upsert({
+          species_zh: speciesZhFromBody || payload.scientific_name,
+          scientific_name: payload.scientific_name,
+          taxonomy_zh: taxonomyZhFromBody || '',
+          is_rare: false,
+          image_url: contributedImageUrl || 'assets/species/placeholder.jpg',
+          max_length_m: 0,
+          max_weight_kg: 0,
+          description_zh: '',
+          source: 'user_contributed',
+          status: 'pending',
+          contributed_by: user.id,
+          contributed_image_url: contributedImageUrl,
+        }, { onConflict: 'scientific_name' });
+      } catch (upsertErr) {
+        console.warn('[catches] species auto-upsert failed (non-fatal):', upsertErr.message);
+      }
+    }
+  }
 
   const ins = await supabaseAdmin
     .from('catches')

@@ -43,6 +43,9 @@ abstract class CatchRepository extends ChangeNotifier {
     Uint8List? imageBytes,
     bool updating = false,
     String? updateId,
+    String? speciesZh,
+    String? taxonomyZh,
+    bool? imageAuthorized,
   });
 
   /// 永久删除已发布鱼获（本地从列表移除；远程 `DELETE /v1/catches/:id`）。

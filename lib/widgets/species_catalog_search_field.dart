@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:fishing_almanac/data/species_catalog.dart';
 import 'package:fishing_almanac/models/species_catalog_entry.dart';
+import 'package:fishing_almanac/services/species_catalog_service.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -28,7 +30,12 @@ class SpeciesCatalogSearchField extends StatelessWidget {
       focusNode: focusNode,
       displayStringForOption: (SpeciesCatalogEntry option) => option.speciesZh,
       optionsBuilder: (TextEditingValue value) {
-        return SpeciesCatalog.searchSpeciesForEdit(value.text, limit: optionLimit);
+        final svc = context.read<SpeciesCatalogService>();
+        return SpeciesCatalog.searchSpeciesForEdit(
+          value.text,
+          limit: optionLimit,
+          entries: svc.hasFetched ? svc.all : null,
+        );
       },
       fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
         return TextField(

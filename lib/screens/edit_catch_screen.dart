@@ -1,11 +1,15 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/api/api_client.dart';
 import 'package:fishing_almanac/api/api_config.dart';
 import 'package:fishing_almanac/api/api_exception.dart';
 import 'package:fishing_almanac/repositories/catch_repository.dart';
@@ -272,6 +276,30 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         imageUrl: draft.imageUrlFallback,
       );
       if (!mounted || token != _identifyToken) return;
+
+      // Store AI metadata in draft for publish flow
+      draft.aiIsFish = r.isFish;
+      draft.aiSpeciesZh = r.speciesZh;
+      draft.aiTaxonomyZh = r.taxonomyZh;
+      draft.aiInCatalog = r.inCatalog;
+
+      if (!r.isFish) {
+        setState(() {
+          _aiLoading = false;
+          _identifyFailed = true;
+          _aiScientificName = null;
+          _aiConfidence = null;
+        });
+        analytics.trackFireAndForget(
+          'ai_identify_not_fish',
+          properties: <String, dynamic>{
+            'upload_flow_id': draft.activeUploadFlowId,
+          },
+        );
+        _showNotFishDialog();
+        return;
+      }
+
       setState(() {
         _aiLoading = false;
         _identifyFailed = false;
@@ -284,15 +312,20 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         properties: <String, dynamic>{
           'success': aiSuccess,
           'confidence': r.confidence,
+          'in_catalog': r.inCatalog,
           'upload_flow_id': draft.activeUploadFlowId,
         },
       );
 
+      // Display species name from AI result (prefer speciesZh if available)
       if (_speciesController.text.trim().isEmpty &&
           r.scientificName.isNotEmpty &&
           r.scientificName != '—') {
         _programmaticSpeciesUpdate = true;
-        _speciesController.text = SpeciesCatalog.displayZhForScientific(r.scientificName);
+        final displayName = r.speciesZh?.isNotEmpty == true
+            ? r.speciesZh!
+            : SpeciesCatalog.displayZhForScientific(r.scientificName);
+        _speciesController.text = displayName;
         _programmaticSpeciesUpdate = false;
       }
     } on ApiException catch (e) {
@@ -344,6 +377,57 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         ),
       ),
     );
+  }
+
+  void _showNotFishDialog() {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('无法识别到鱼种'),
+        content: const Text('上传的图片中未检测到鱼类，请重新拍摄或选择包含鱼类的照片。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('知道了'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              unawaited(_showNewPhotoPickerSheet());
+            },
+            child: const Text('重新选择照片'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _showImageAuthorizationDialog() async {
+    if (!mounted) return false;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('图片授权'),
+        content: const Text(
+          '您正在上传一个图鉴中暂无记录的新鱼种。\n\n'
+          '是否同意将您上传的照片作为该鱼种在公共物种图鉴中的展示图片？\n\n'
+          '如不授权，物种图片将显示为"图片待上传"。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('不授权'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('授权使用'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   Future<void> _pickGallery() async {
@@ -488,10 +572,49 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       },
     );
 
-    draft.scientificName = SpeciesCatalog.resolveScientificNameFromUserInput(species);
+    final resolvedScientific = SpeciesCatalog.resolveScientificNameFromUserInput(species);
+    draft.scientificName = resolvedScientific;
     draft.notes = _notesController.text.trim();
     draft.weightKg = weightParsed;
     draft.lengthCm = lengthParsed;
+
+    // New species flow: if AI says species is not in catalog, prompt for image authorization
+    if (!draft.aiInCatalog &&
+        resolvedScientific.isNotEmpty &&
+        resolvedScientific != 'Indeterminate' &&
+        resolvedScientific != 'Unnamed species' &&
+        widget.editingPublishedId == null) {
+      final authorized = await _showImageAuthorizationDialog();
+      if (!mounted) return;
+      draft.imageAuthorized = authorized;
+
+      // Create new species entry via backend
+      final api = context.read<ApiClient>();
+      try {
+        final formFields = <String, dynamic>{
+          'scientific_name': resolvedScientific,
+          'species_zh': draft.aiSpeciesZh ?? species,
+          'taxonomy_zh': draft.aiTaxonomyZh ?? '',
+          'image_authorized': authorized.toString(),
+        };
+        if (authorized && draft.imageBytes != null && draft.imageBytes!.isNotEmpty) {
+          final form = FormData.fromMap(<String, dynamic>{
+            ...formFields,
+            'image': MultipartFile.fromBytes(
+              draft.imageBytes!,
+              filename: 'species.jpg',
+              contentType: MediaType('image', 'jpeg'),
+            ),
+          });
+          await api.postMultipart(SpeciesCatalogEndpoints.create, data: form);
+        } else {
+          await api.post(SpeciesCatalogEndpoints.create, data: formFields);
+        }
+      } catch (e) {
+        debugPrint('[publish] species catalog create failed (non-fatal): $e');
+      }
+    }
+
     try {
       final original =
           widget.editingPublishedId != null ? await repo.getById(widget.editingPublishedId!) : null;
@@ -501,6 +624,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         imageBytes: draft.imageBytes,
         updating: widget.editingPublishedId != null,
         updateId: widget.editingPublishedId,
+        speciesZh: draft.aiSpeciesZh,
+        taxonomyZh: draft.aiTaxonomyZh,
+        imageAuthorized: draft.imageAuthorized,
       );
     } on ApiException catch (e) {
       if (!mounted) return;

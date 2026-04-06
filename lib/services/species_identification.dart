@@ -5,15 +5,31 @@ class SpeciesIdentificationResult {
   const SpeciesIdentificationResult({
     required this.scientificName,
     required this.confidence,
+    this.isFish = true,
+    this.speciesZh,
+    this.taxonomyZh,
+    this.inCatalog = true,
     this.rawLabel,
     this.metadata,
   });
 
+  /// AI 判断图片中是否有鱼。
+  final bool isFish;
+
   /// 与 `species_catalog.scientific_name` 对齐的稳定标识。
   final String scientificName;
 
+  /// AI 返回的中文名。
+  final String? speciesZh;
+
+  /// AI 返回的分类文案（纲·目·科）。
+  final String? taxonomyZh;
+
   /// 匹配置信度，范围建议 **0.0 ~ 1.0**。
   final double confidence;
+
+  /// 该物种是否已存在于服务端 species_catalog。
+  final bool inCatalog;
 
   /// 模型原始类别标签（可选）。
   final String? rawLabel;

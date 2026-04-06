@@ -148,6 +148,21 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                                         letterSpacing: 0.8,
                                       ),
                                     ),
+                                    if (entry.isPending || entry.isUserContributed || entry.isInfoIncomplete) ...[
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          if (entry.isPending)
+                                            _TagChip(label: '待审核', color: Colors.orange),
+                                          if (entry.isUserContributed && !entry.isPending)
+                                            _TagChip(label: '社区贡献', color: AppColors.primary),
+                                          if (entry.isInfoIncomplete)
+                                            _TagChip(label: '信息待完善', color: Colors.amber),
+                                        ],
+                                      ),
+                                    ],
                                     const SizedBox(height: 20),
                                     Row(
                                       children: [
@@ -409,6 +424,33 @@ class _GlassStat extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  const _TagChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
       ),
     );
   }

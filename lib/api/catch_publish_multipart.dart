@@ -10,6 +10,9 @@ import 'package:fishing_almanac/models/published_catch.dart';
 FormData buildCatchPublishFormData(
   PublishedCatch publishedCatch, {
   Uint8List? imageJpegBytes,
+  String? speciesZh,
+  String? taxonomyZh,
+  bool? imageAuthorized,
 }) {
   final map = <String, dynamic>{
     'scientific_name': publishedCatch.scientificName,
@@ -24,6 +27,15 @@ FormData buildCatchPublishFormData(
   }
   if (publishedCatch.lng != null) {
     map['lng'] = publishedCatch.lng!.toString();
+  }
+  if (speciesZh != null && speciesZh.isNotEmpty) {
+    map['species_zh'] = speciesZh;
+  }
+  if (taxonomyZh != null && taxonomyZh.isNotEmpty) {
+    map['taxonomy_zh'] = taxonomyZh;
+  }
+  if (imageAuthorized != null) {
+    map['image_authorized'] = imageAuthorized.toString();
   }
   if (imageJpegBytes != null && imageJpegBytes.isNotEmpty) {
     map[CatchPublishEndpoints.imageField] = MultipartFile.fromBytes(

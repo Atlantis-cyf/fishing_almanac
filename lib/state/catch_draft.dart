@@ -30,6 +30,13 @@ class CatchDraft extends ChangeNotifier {
   double? editCacheAiConfidence;
   bool editCacheIdentifyFailed = false;
 
+  /// AI 识别结果中的附加字段（用于新鱼种创建流程）。
+  bool aiIsFish = true;
+  String? aiSpeciesZh;
+  String? aiTaxonomyZh;
+  bool aiInCatalog = true;
+  bool imageAuthorized = false;
+
   void setPickedImageBytes(List<int> bytes) {
     imageBytes = Uint8List.fromList(bytes);
     imageUrlFallback = null;
@@ -104,6 +111,11 @@ class CatchDraft extends ChangeNotifier {
     editCacheAiScientificName = null;
     editCacheAiConfidence = null;
     editCacheIdentifyFailed = false;
+    aiIsFish = true;
+    aiSpeciesZh = null;
+    aiTaxonomyZh = null;
+    aiInCatalog = true;
+    imageAuthorized = false;
     notifyListeners();
   }
 

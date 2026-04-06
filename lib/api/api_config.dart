@@ -155,6 +155,19 @@ abstract final class AnalyticsEndpoints {
   );
 }
 
+/// 物种目录（服务端动态拉取）。
+abstract final class SpeciesCatalogEndpoints {
+  static const String list = String.fromEnvironment(
+    'SPECIES_CATALOG_LIST_PATH',
+    defaultValue: '/v1/species/catalog',
+  );
+
+  static const String create = String.fromEnvironment(
+    'SPECIES_CATALOG_CREATE_PATH',
+    defaultValue: '/v1/species/catalog',
+  );
+}
+
 /// 图鉴相关 API。
 abstract final class EncyclopediaEndpoints {
   /// 当前进度：已解锁鱼种数量 / 全图鉴物种库数量（目前后端 mock 650）。

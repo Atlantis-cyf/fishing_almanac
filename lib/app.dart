@@ -11,6 +11,7 @@ import 'package:fishing_almanac/auth/auth_session.dart';
 import 'package:fishing_almanac/auth/token_storage.dart';
 import 'package:fishing_almanac/router/app_router.dart';
 import 'package:fishing_almanac/services/remote_species_identification.dart';
+import 'package:fishing_almanac/services/species_catalog_service.dart';
 import 'package:fishing_almanac/services/species_identification.dart';
 import 'package:fishing_almanac/services/user_profile_remote.dart';
 import 'package:fishing_almanac/repositories/local_catch_repository.dart';
@@ -48,6 +49,7 @@ class _FishingAlmanacAppState extends State<FishingAlmanacApp> {
   late final AnalyticsClient _analytics;
   late final GoRouter _router;
   late final SpeciesIdentificationService _speciesIdentificationService;
+  late final SpeciesCatalogService _speciesCatalogService;
 
   CatchRepository _createCatchRepository() {
     final useRemote = widget.useRemoteCatchRepository ??
@@ -84,6 +86,7 @@ class _FishingAlmanacAppState extends State<FishingAlmanacApp> {
     );
     _catchRepository = _createCatchRepository();
     _speciesIdentificationService = _createSpeciesIdentificationService();
+    _speciesCatalogService = SpeciesCatalogService(api: _apiClient);
     _router = createAppRouter(authSession: _authSession);
     unawaited(_restoreAccessToken());
     _analytics.trackFireAndForget('app_open');
@@ -128,6 +131,7 @@ class _FishingAlmanacAppState extends State<FishingAlmanacApp> {
         Provider<AuthRepository>.value(value: _authRepository),
         Provider<AnalyticsClient>.value(value: _analytics),
         Provider<SpeciesIdentificationService>.value(value: _speciesIdentificationService),
+        ChangeNotifierProvider<SpeciesCatalogService>.value(value: _speciesCatalogService),
       ],
       child: MaterialApp.router(
         title: '海钓图鉴',

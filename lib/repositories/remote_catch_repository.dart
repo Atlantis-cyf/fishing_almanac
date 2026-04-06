@@ -172,6 +172,9 @@ class RemoteCatchRepository extends CatchRepository {
     Uint8List? imageBytes,
     bool updating = false,
     String? updateId,
+    String? speciesZh,
+    String? taxonomyZh,
+    bool? imageAuthorized,
   }) async {
     if (!_auth.isReady || !_auth.isLoggedIn) {
       throw ApiException(message: '请先登录后再发布');
@@ -192,7 +195,13 @@ class RemoteCatchRepository extends CatchRepository {
       throw ApiException(message: '请添加照片后再发布');
     }
 
-    final form = buildCatchPublishFormData(publishedCatch, imageJpegBytes: jpeg);
+    final form = buildCatchPublishFormData(
+      publishedCatch,
+      imageJpegBytes: jpeg,
+      speciesZh: speciesZh,
+      taxonomyZh: taxonomyZh,
+      imageAuthorized: imageAuthorized,
+    );
 
     if (usePut) {
       await _api.putMultipart(

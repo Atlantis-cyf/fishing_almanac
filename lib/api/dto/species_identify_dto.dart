@@ -7,12 +7,20 @@ class SpeciesIdentifyPayload {
   const SpeciesIdentifyPayload._({
     required this.scientificName,
     required this.confidence,
+    this.isFish = true,
+    this.speciesZh,
+    this.taxonomyZh,
+    this.inCatalog = true,
     this.rawLabel,
     this.metadata,
   });
 
+  final bool isFish;
   final String scientificName;
+  final String? speciesZh;
+  final String? taxonomyZh;
   final double confidence;
+  final bool inCatalog;
   final String? rawLabel;
   final Map<String, dynamic>? metadata;
 
@@ -52,9 +60,16 @@ class SpeciesIdentifyPayload {
     if (metaVal is Map) {
       meta = Map<String, dynamic>.from(metaVal);
     }
+    final isFish = m['is_fish'] != false;
+    final taxonomyZh = _firstString(m, const ['taxonomy_zh', 'taxonomyZh']);
+    final inCatalog = m['in_catalog'] != false;
     return SpeciesIdentifyPayload._(
+      isFish: isFish,
       scientificName: resolved,
+      speciesZh: zh,
+      taxonomyZh: taxonomyZh,
       confidence: conf,
+      inCatalog: inCatalog,
       rawLabel: raw,
       metadata: meta,
     );

@@ -185,6 +185,9 @@ class LocalCatchRepository extends CatchRepository {
     Uint8List? imageBytes,
     bool updating = false,
     String? updateId,
+    String? speciesZh,
+    String? taxonomyZh,
+    bool? imageAuthorized,
   }) async {
     await upsertLocal(publishedCatch);
   }

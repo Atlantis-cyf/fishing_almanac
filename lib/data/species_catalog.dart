@@ -31,14 +31,18 @@ abstract final class SpeciesCatalog {
   }
 
   /// 编辑页物种搜索：中文名子串 + 拉丁/英文名子串（不区分大小写）+ 分类文案，按相关度排序。
-  static List<SpeciesCatalogEntry> searchSpeciesForEdit(String rawQuery, {int limit = 16}) {
+  static List<SpeciesCatalogEntry> searchSpeciesForEdit(
+    String rawQuery, {
+    int limit = 16,
+    List<SpeciesCatalogEntry>? entries,
+  }) {
     final q = rawQuery.trim();
     if (q.isEmpty) return const [];
     final qLower = q.toLowerCase();
     final limitClamped = limit.clamp(1, 64);
 
     final hits = <({SpeciesCatalogEntry e, int score})>[];
-    for (final e in all) {
+    for (final e in (entries ?? all)) {
       final zh = e.speciesZh.trim();
       if (zh.isEmpty) continue;
 

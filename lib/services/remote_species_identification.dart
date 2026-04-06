@@ -52,8 +52,12 @@ class RemoteSpeciesIdentificationService implements SpeciesIdentificationService
 
     final payload = SpeciesIdentifyPayload.fromResponseData(res.data);
     return SpeciesIdentificationResult(
+      isFish: payload.isFish,
       scientificName: payload.scientificName,
+      speciesZh: payload.speciesZh,
+      taxonomyZh: payload.taxonomyZh,
       confidence: payload.confidence,
+      inCatalog: payload.inCatalog,
       rawLabel: payload.rawLabel,
       metadata: {
         ...?payload.metadata,

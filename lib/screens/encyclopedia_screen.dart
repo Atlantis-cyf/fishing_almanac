@@ -13,6 +13,7 @@ import 'package:fishing_almanac/models/species_catalog_entry.dart';
 import 'package:fishing_almanac/models/species_item.dart';
 import 'package:fishing_almanac/analytics/analytics_client.dart';
 import 'package:fishing_almanac/repositories/catch_repository.dart';
+import 'package:fishing_almanac/services/species_catalog_service.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/widgets/app_network_image.dart';
 import 'package:fishing_almanac/widgets/bottom_nav.dart';
@@ -29,11 +30,9 @@ class EncyclopediaScreen extends StatefulWidget {
     return 'nearshore';
   }
 
-  static List<SpeciesItem>? __speciesCache;
-
-  static List<SpeciesItem> get _species {
-    return __speciesCache ??= SpeciesCatalog.all
-        .where((e) => e.id < 100)
+  static List<SpeciesItem> buildSpeciesItems(List<SpeciesCatalogEntry> entries) {
+    return entries
+        .where((e) => e.status != 'rejected')
         .map(
           (e) => SpeciesItem(
             id: e.id,
@@ -66,7 +65,12 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
   AuthSession? _authSession;
   void Function()? _authSessionListener;
 
+  SpeciesCatalogService? _catalogService;
+  void Function()? _catalogListener;
+
   int _totalCount = 0;
+
+  List<SpeciesItem> _species = [];
 
   /// key: `scientific_name`（与 catalog 一致），value: 渔获条数（approved）。
   Map<String, int> _myCatchCounts = const {};
@@ -85,6 +89,7 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
   @override
   void initState() {
     super.initState();
+    _rebuildSpeciesList();
     _totalCount = _species.length;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -107,6 +112,17 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
       };
       auth.addListener(_authSessionListener!);
 
+      final catalogSvc = context.read<SpeciesCatalogService>();
+      _catalogService = catalogSvc;
+      _catalogListener = () {
+        if (!mounted) return;
+        _rebuildSpeciesList();
+        unawaited(_loadEncyclopedia());
+      };
+      catalogSvc.addListener(_catalogListener!);
+
+      unawaited(catalogSvc.fetchIfNeeded());
+
       context.read<AnalyticsClient>().trackFireAndForget('encyclopedia_open');
       await _loadEncyclopedia();
     });
@@ -124,13 +140,28 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
     if (a != null && al != null) {
       a.removeListener(al);
     }
+    final cs = _catalogService;
+    final cl = _catalogListener;
+    if (cs != null && cl != null) {
+      cs.removeListener(cl);
+    }
     super.dispose();
   }
 
-  List<SpeciesItem> get _species => EncyclopediaScreen._species;
+  void _rebuildSpeciesList() {
+    final svc = _catalogService;
+    final entries = svc != null ? svc.all : SpeciesCatalog.all;
+    _species = EncyclopediaScreen.buildSpeciesItems(entries);
+  }
 
   Map<String, SpeciesItem> get _speciesByScientific =>
       {for (final s in _species) s.speciesScientificName: s};
+
+  SpeciesCatalogEntry? _catalogEntryForScientific(String scientificName) {
+    final svc = _catalogService;
+    if (svc != null) return svc.tryByScientificName(scientificName);
+    return SpeciesCatalog.tryByScientificName(scientificName);
+  }
 
   /// 将单条鱼获上的学名对齐到图鉴卡片用的 [SpeciesCatalog] 键（空白/大小写 → 目录里的 canonical）。
   String? _catalogKeyForCatchScientific(String raw) {
@@ -497,6 +528,7 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                       final card = cards[index];
                       final s = card.speciesItem;
                       final unlocked = card.unlocked;
+                      final catEntry = _catalogEntryForScientific(card.speciesScientificName);
 
                       final bg = unlocked
                           ? AppColors.surfaceContainerHigh
@@ -556,6 +588,38 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                                           ),
                                         ),
                                       ),
+                                    if (catEntry != null && catEntry.isPending)
+                                      Positioned(
+                                        top: 8,
+                                        left: 8,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: Colors.orange.withValues(alpha: 0.85),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            '待审核',
+                                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
+                                          ),
+                                        ),
+                                      ),
+                                    if (catEntry != null && catEntry.isUserContributed && !catEntry.isPending)
+                                      Positioned(
+                                        top: 8,
+                                        left: 8,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withValues(alpha: 0.75),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text(
+                                            '社区',
+                                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -575,10 +639,16 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 2),
-                                    Text(
-                                      unlocked ? '${card.catchCount} 渔获' : '尚未捕获',
-                                      style: TextStyle(fontSize: 10, color: countColor),
-                                    ),
+                                    if (catEntry != null && catEntry.isInfoIncomplete)
+                                      Text(
+                                        '信息待完善',
+                                        style: TextStyle(fontSize: 9, color: Colors.orange.withValues(alpha: 0.8)),
+                                      )
+                                    else
+                                      Text(
+                                        unlocked ? '${card.catchCount} 渔获' : '尚未捕获',
+                                        style: TextStyle(fontSize: 10, color: countColor),
+                                      ),
                                   ],
                                 ),
                               ),
