@@ -17,6 +17,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Acanthopagrus latus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 2,
@@ -31,6 +32,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Acanthopagrus schlegelii',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 3,
@@ -45,6 +47,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Wolf eel',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 4,
@@ -59,6 +62,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Giant mottled eel',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 5,
@@ -73,6 +77,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Anyperodon leucogrammicus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 6,
@@ -87,6 +92,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Mulloway',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 7,
@@ -101,6 +107,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bullet tuna',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 8,
@@ -115,6 +122,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bolbometopon',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: '稀有/需保护（待复核）',
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 9,
@@ -129,6 +137,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Crevalle jack',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 10,
@@ -143,6 +152,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Giant trevally',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 11,
@@ -157,6 +167,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bluefin trevally',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 12,
@@ -171,6 +182,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bigeye trevally',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 13,
@@ -185,6 +197,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bull shark',
     encyclopediaCategory: '软骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 14,
@@ -199,6 +212,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Cephalopholis argus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 15,
@@ -213,6 +227,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Cephalopholis cyanostigma',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 16,
@@ -227,6 +242,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Coral hind',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 17,
@@ -241,6 +257,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Humphead wrasse',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: '稀有/需保护（待复核）',
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 18,
@@ -255,6 +272,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Chelidonichthys spinosus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 19,
@@ -269,6 +287,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pompano dolphinfish',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 20,
@@ -283,6 +302,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Mahi-mahi',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 21,
@@ -297,6 +317,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Humpback grouper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 22,
@@ -311,6 +332,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Dasyatis akajei',
     encyclopediaCategory: '软骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 23,
@@ -325,6 +347,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Painted sweetlips',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 24,
@@ -339,6 +362,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'European sea bass',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 25,
@@ -353,6 +377,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Epinephelus akaara',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 26,
@@ -367,6 +392,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Orange-spotted grouper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 27,
@@ -381,6 +407,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Giant grouper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 28,
@@ -395,6 +422,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Kawakawa',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 29,
@@ -409,6 +437,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Evynnis tumifrons',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 30,
@@ -423,6 +452,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Devil stinger',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 31,
@@ -437,6 +467,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Black marlin',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 32,
@@ -451,6 +482,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Indo-Pacific sailfish',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 33,
@@ -465,6 +497,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Johnius belangerii',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 34,
@@ -479,6 +512,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Katsuwonus pelamis',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 35,
@@ -493,6 +527,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Large yellow croaker',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 36,
@@ -507,6 +542,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Small yellow croaker',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 37,
@@ -521,6 +557,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Lateolabrax japonicus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 38,
@@ -535,6 +572,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Lateolabrax maculatus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 39,
@@ -549,6 +587,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Lates calcarifer',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 40,
@@ -563,6 +602,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Trumpet emperor',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 41,
@@ -577,6 +617,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Spangled emperor',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 42,
@@ -591,6 +632,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Mangrove red snapper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 43,
@@ -605,6 +647,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Red snapper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 44,
@@ -619,6 +662,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Red snapper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 45,
@@ -633,6 +677,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Lutjanus erythropterus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 46,
@@ -647,6 +692,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bluestripe snapper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 47,
@@ -661,6 +707,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Lutjanus malabaricus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 48,
@@ -675,6 +722,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Russell\'s snapper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 49,
@@ -689,6 +737,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Emperor red snapper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 50,
@@ -703,6 +752,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Atlantic blue marlin',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 51,
@@ -717,6 +767,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Stripey seaperch',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 52,
@@ -731,6 +782,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Largemouth bass',
     encyclopediaCategory: '淡水鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 53,
@@ -745,6 +797,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Nemipterus japonicus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 54,
@@ -759,6 +812,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Nemipterus virgatus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 55,
@@ -773,6 +827,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Common octopus (China coastal form)',
     encyclopediaCategory: '头足类',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 56,
@@ -787,6 +842,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Barred knifejaw',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 57,
@@ -801,6 +857,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Oplegnathus punctatus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 58,
@@ -815,6 +872,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pagrus major',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 59,
@@ -829,6 +887,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pampus argenteus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 60,
@@ -843,6 +902,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Parargyrops edita',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 61,
@@ -857,6 +917,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Black pomfret',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 62,
@@ -871,6 +932,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Manybar goatfish',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 63,
@@ -885,6 +947,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pennahia argentata',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 64,
@@ -899,6 +962,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Plectropomus areolatus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: '稀有/需保护（待复核）',
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 65,
@@ -913,6 +977,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Leopard coral grouper',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 66,
@@ -927,6 +992,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bar cheek coral trout',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 67,
@@ -941,6 +1007,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Priacanthus macracanthus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 68,
@@ -955,6 +1022,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Priacanthus tayenus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 69,
@@ -969,6 +1037,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pristipomoides filamentosus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 70,
@@ -983,6 +1052,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Rhabdosargus sarba',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 71,
@@ -997,6 +1067,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Scarus ghobban',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 72,
@@ -1011,6 +1082,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pacific mackerel',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 73,
@@ -1025,6 +1097,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Narrow-barred Spanish mackerel',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 74,
@@ -1039,6 +1112,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Japanese Spanish mackerel',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 75,
@@ -1053,6 +1127,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Scorpaena scrofa',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 76,
@@ -1067,6 +1142,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pharaoh cuttlefish',
     encyclopediaCategory: '头足类',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 77,
@@ -1081,6 +1157,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Seriola dumerili',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 78,
@@ -1095,6 +1172,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Seriola lalandi',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 79,
@@ -1109,6 +1187,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Seriola quinqueradiata',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 80,
@@ -1123,6 +1202,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Seriola rivoliana',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 81,
@@ -1137,6 +1217,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'White-spotted spinefoot',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 82,
@@ -1151,6 +1232,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Siganus fuscescens',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 83,
@@ -1165,6 +1247,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Siganus guttatus',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 84,
@@ -1179,6 +1262,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Mandarin fish',
     encyclopediaCategory: '淡水鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 85,
@@ -1193,6 +1277,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Thread-sail filefish',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 86,
@@ -1207,6 +1292,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Takifugu rubripes',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 87,
@@ -1221,6 +1307,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Albacore',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 88,
@@ -1235,6 +1322,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Thunnus albacares',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 89,
@@ -1249,6 +1337,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Southern bluefin tuna',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 90,
@@ -1263,6 +1352,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Bigeye tuna',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 91,
@@ -1277,6 +1367,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Pacific bluefin tuna',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 92,
@@ -1291,6 +1382,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Atlantic bluefin tuna',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 93,
@@ -1305,6 +1397,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Longtail tuna',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 94,
@@ -1319,6 +1412,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Trachinotus blochii',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 95,
@@ -1333,6 +1427,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Japanese jack mackerel',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 96,
@@ -1347,6 +1442,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Triakis scyllium',
     encyclopediaCategory: '软骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 97,
@@ -1361,6 +1457,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Largehead hairtail',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 98,
@@ -1375,6 +1472,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Upeneus tragula',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 99,
@@ -1389,6 +1487,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Variola louti',
     encyclopediaCategory: '硬骨鱼',
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 100,
@@ -1403,6 +1502,7 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Unknown',
     encyclopediaCategory: null,
     rarityDisplay: null,
+    aliasZh: null,
   ),
   SpeciesCatalogEntry(
     id: 101,
@@ -1417,5 +1517,6 @@ const List<SpeciesCatalogEntry> kSpeciesCatalogAll = [
     nameEn: 'Unnamed',
     encyclopediaCategory: null,
     rarityDisplay: null,
+    aliasZh: null,
   ),
 ];

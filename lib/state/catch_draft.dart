@@ -9,7 +9,7 @@ import 'package:fishing_almanac/models/published_catch.dart';
 class CatchDraft extends ChangeNotifier {
   Uint8List? imageBytes;
   String? imageUrlFallback;
-  String scientificName = 'Thunnus thynnus';
+  String scientificName = '';
   String notes = '';
   double weightKg = 0;
   double lengthCm = 0;
@@ -91,7 +91,7 @@ class CatchDraft extends ChangeNotifier {
   void clearForNewRecord() {
     imageBytes = null;
     imageUrlFallback = null;
-    scientificName = 'Thunnus thynnus';
+    scientificName = '';
     notes = '';
     weightKg = 0;
     lengthCm = 0;

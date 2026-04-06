@@ -104,10 +104,12 @@ def build_sql(rows: list[dict[str, str]], source_note: str) -> tuple[str, int]:
         name_en = (row.get("name_en") or "").strip()
         enc_cat = (row.get("encyclopedia_category") or "").strip()
         rdis = norm_rarity_display(row.get("rarity_display") or "")
+        alias_zh = (row.get("alias_zh") or "").strip()
 
         name_en_sql = sql_str(name_en) if name_en else "null"
         enc_sql = sql_str(enc_cat) if enc_cat else "null"
         rare_sql = sql_str(rdis) if rdis is not None else "null"
+        alias_sql = sql_str(alias_zh) if alias_zh else "null"
 
         parts = [
             sql_str(zh),
@@ -121,6 +123,7 @@ def build_sql(rows: list[dict[str, str]], source_note: str) -> tuple[str, int]:
             name_en_sql,
             enc_sql,
             rare_sql,
+            alias_sql,
         ]
 
         value_lines.append("  (" + ", ".join(parts) + ")")
@@ -137,7 +140,8 @@ def build_sql(rows: list[dict[str, str]], source_note: str) -> tuple[str, int]:
 
 insert into public.species_catalog (
   species_zh, scientific_name, taxonomy_zh, is_rare, image_url,
-  max_length_m, max_weight_kg, description_zh, name_en, encyclopedia_category, rarity_display
+  max_length_m, max_weight_kg, description_zh, name_en, encyclopedia_category, rarity_display,
+  alias_zh
 ) values
 {body}
 on conflict (species_zh) do update set
@@ -150,7 +154,8 @@ on conflict (species_zh) do update set
   description_zh = excluded.description_zh,
   name_en = excluded.name_en,
   encyclopedia_category = excluded.encyclopedia_category,
-  rarity_display = excluded.rarity_display;
+  rarity_display = excluded.rarity_display,
+  alias_zh = excluded.alias_zh;
 
 select setval(
   pg_get_serial_sequence('public.species_catalog', 'id'),

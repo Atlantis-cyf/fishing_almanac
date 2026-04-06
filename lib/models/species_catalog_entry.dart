@@ -13,6 +13,7 @@ class SpeciesCatalogEntry {
     this.nameEn,
     this.encyclopediaCategory,
     this.rarityDisplay,
+    this.aliasZh,
   });
 
   final int id;
@@ -27,4 +28,7 @@ class SpeciesCatalogEntry {
   final String? nameEn;
   final String? encyclopediaCategory;
   final String? rarityDisplay;
+
+  /// Comma-separated Chinese aliases (e.g. '乌头,海鲋').
+  final String? aliasZh;
 }

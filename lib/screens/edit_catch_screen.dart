@@ -146,9 +146,11 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         );
       }
 
-      _programmaticSpeciesUpdate = true;
-      _speciesController.text = SpeciesCatalog.displayZhForScientific(draft.scientificName);
-      _programmaticSpeciesUpdate = false;
+      if (draft.scientificName.isNotEmpty) {
+        _programmaticSpeciesUpdate = true;
+        _speciesController.text = SpeciesCatalog.displayZhForScientific(draft.scientificName);
+        _programmaticSpeciesUpdate = false;
+      }
       _notesController.text = draft.notes;
       _weightController.text = _metricTextForDraft(draft.weightKg);
       _lengthController.text = _metricTextForDraft(draft.lengthCm);
@@ -724,6 +726,36 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                               ),
                             ),
                           ),
+                          if (_aiLoading)
+                            Positioned.fill(
+                              child: Container(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 48,
+                                        height: 48,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 3.5,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'AI 识别中…',
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.9),
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

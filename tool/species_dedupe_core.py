@@ -17,6 +17,7 @@ FIELDNAMES = [
     "encyclopedia_category",
     "rarity_display",
     "created_at",
+    "alias_zh",
 ]
 
 CANON_SPECIES_ZH: dict[str, str] = {

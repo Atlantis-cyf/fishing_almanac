@@ -119,6 +119,7 @@ def main() -> None:
             rarity_disp = ""
         if rarity_disp.upper() in ("FALSE", "TRUE", "NONE", ""):
             rarity_disp = ""
+        alias_zh = (row.get("alias_zh") or "").strip()
         try:
             max_m = float((row.get("max_length_m") or "0").strip() or "0")
         except ValueError:
@@ -152,6 +153,7 @@ def main() -> None:
         lines.append(f"    nameEn: {opt_field(name_en)},")
         lines.append(f"    encyclopediaCategory: {opt_field(enc_cat)},")
         lines.append(f"    rarityDisplay: {opt_field(rarity_disp)},")
+        lines.append(f"    aliasZh: {opt_field(alias_zh)},")
         lines.append("  ),")
 
     # Placeholders for catches FK / free-text (same asset as a known fish for offline hero).
@@ -168,6 +170,7 @@ def main() -> None:
     lines.append("    nameEn: 'Unknown',")
     lines.append("    encyclopediaCategory: null,")
     lines.append("    rarityDisplay: null,")
+    lines.append("    aliasZh: null,")
     lines.append("  ),")
     lines.append("  SpeciesCatalogEntry(")
     lines.append("    id: 101,")
@@ -182,6 +185,7 @@ def main() -> None:
     lines.append("    nameEn: 'Unnamed',")
     lines.append("    encyclopediaCategory: null,")
     lines.append("    rarityDisplay: null,")
+    lines.append("    aliasZh: null,")
     lines.append("  ),")
 
     lines.append("];")

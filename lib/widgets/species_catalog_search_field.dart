@@ -106,6 +106,18 @@ class SpeciesCatalogSearchField extends StatelessWidget {
                               color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),
                             ),
                           ),
+                          if (e.aliasZh != null && e.aliasZh!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '别名: ${e.aliasZh}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.onSurfaceVariant.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

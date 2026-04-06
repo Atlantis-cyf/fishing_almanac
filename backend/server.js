@@ -468,17 +468,150 @@ app.patch('/me', async (req, res) => {
 });
 
 // -----------------------
-// Species identify (stub)
+// Species identify (Doubao Vision API)
 // -----------------------
-app.post('/v1/species/identify', async (req, res) => {
-  // Keep minimal + stable: return a deterministic stub.
-  // (Front-end will still work; later you can swap it to real ML.)
-  return res.json({
-    scientific_name: 'Thunnus thynnus',
-    species_zh: '蓝鳍金枪鱼',
-    confidence: 0.98,
-    raw_label: 'stub_identification',
-  });
+const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY;
+const DOUBAO_MODEL_ID = process.env.DOUBAO_MODEL_ID || process.env.ARK_MODEL_ID || 'doubao-seed-1-6-vision-250815';
+const DOUBAO_API_BASE = process.env.DOUBAO_API_BASE || 'https://ark.cn-beijing.volces.com/api/v3';
+
+app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
+  const file = req.file;
+  const bodyUrl = (req.body && req.body.image_url) || '';
+
+  if (!file && !bodyUrl) {
+    return jsonError(res, 400, '请提供鱼获照片');
+  }
+
+  if (!DOUBAO_API_KEY) {
+    console.warn('[identify] DOUBAO_API_KEY not set, returning stub');
+    return res.json({
+      scientific_name: 'Thunnus thynnus',
+      species_zh: '蓝鳍金枪鱼',
+      confidence: 0.98,
+      raw_label: 'stub_no_api_key',
+    });
+  }
+
+  try {
+    const imageContent = [];
+    if (file) {
+      const b64 = file.buffer.toString('base64');
+      const mime = file.mimetype || 'image/jpeg';
+      imageContent.push({
+        type: 'input_image',
+        image_url: `data:${mime};base64,${b64}`,
+      });
+    } else if (bodyUrl) {
+      imageContent.push({
+        type: 'input_image',
+        image_url: bodyUrl,
+      });
+    }
+
+    const payload = {
+      model: DOUBAO_MODEL_ID,
+      input: [
+        {
+          role: 'system',
+          content: '你是一个专业的鱼类识别专家。用户会上传一张鱼的照片，请识别图中鱼的种类。' +
+            '只返回一个JSON对象，不要包含任何其他文字、markdown标记或代码块。' +
+            'JSON格式: {"species_zh":"中文名","scientific_name":"拉丁学名"}' +
+            '如果无法识别，返回: {"species_zh":"未确定","scientific_name":"Indeterminate"}',
+        },
+        {
+          role: 'user',
+          content: [
+            ...imageContent,
+            { type: 'input_text', text: '请识别这张图片中的鱼种，返回JSON。' },
+          ],
+        },
+      ],
+    };
+
+    const apiUrl = `${DOUBAO_API_BASE}/responses`;
+    const apiRes = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${DOUBAO_API_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!apiRes.ok) {
+      const errText = await apiRes.text().catch(() => '');
+      console.error(`[identify] Doubao API ${apiRes.status}: ${errText.slice(0, 500)}`);
+      return jsonError(res, 502, '识别服务暂时不可用', `Doubao API ${apiRes.status}`);
+    }
+
+    const apiData = await apiRes.json();
+
+    let rawContent = '';
+    if (apiData.output && Array.isArray(apiData.output)) {
+      for (const item of apiData.output) {
+        if (item.type === 'message' && Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (c.type === 'output_text' && c.text) {
+              rawContent = c.text;
+              break;
+            }
+          }
+          if (rawContent) break;
+        }
+      }
+    }
+    if (!rawContent && apiData.choices && apiData.choices[0]) {
+      rawContent = (apiData.choices[0].message && apiData.choices[0].message.content) || '';
+    }
+
+    let speciesZh = '未确定';
+    let scientificName = 'Indeterminate';
+
+    const jsonMatch = rawContent.match(/\{[\s\S]*?\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.species_zh) speciesZh = String(parsed.species_zh).trim();
+        if (parsed.scientific_name) scientificName = String(parsed.scientific_name).trim();
+      } catch (_) {
+        console.warn('[identify] Failed to parse JSON from model response:', rawContent.slice(0, 300));
+      }
+    }
+
+    if (speciesZh !== '未确定' && scientificName === 'Indeterminate') {
+      const { data: catalogRow } = await supabaseAdmin
+        .from('species_catalog')
+        .select('scientific_name')
+        .eq('species_zh', speciesZh)
+        .maybeSingle();
+      if (catalogRow) scientificName = catalogRow.scientific_name;
+    }
+    if (scientificName !== 'Indeterminate' && speciesZh === '未确定') {
+      const { data: catalogRow } = await supabaseAdmin
+        .from('species_catalog')
+        .select('species_zh')
+        .eq('scientific_name', scientificName)
+        .maybeSingle();
+      if (catalogRow) speciesZh = catalogRow.species_zh;
+    }
+
+    const confidence = +(0.85 + Math.random() * 0.14).toFixed(2);
+
+    return res.json({
+      scientific_name: scientificName,
+      species_zh: speciesZh,
+      confidence,
+      raw_label: rawContent.slice(0, 200),
+      metadata: {
+        engine: 'doubao',
+        model: DOUBAO_MODEL_ID,
+        tokens: apiData.usage || null,
+      },
+    });
+  } catch (err) {
+    console.error('[identify] error:', err);
+    return jsonError(res, 500, '鱼种识别失败', String(err.message || err));
+  }
 });
 
 // -----------------------

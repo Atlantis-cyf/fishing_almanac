@@ -59,6 +59,18 @@ abstract final class SpeciesCatalog {
         score += en.startsWith(qLower) ? 40 : 28;
       }
 
+      final alias = e.aliasZh ?? '';
+      if (alias.isNotEmpty) {
+        for (final a in alias.split(',')) {
+          final at = a.trim();
+          if (at.isEmpty) continue;
+          if (at.contains(q)) {
+            score += at.startsWith(q) ? 90 : 65;
+            break;
+          }
+        }
+      }
+
       if (e.taxonomyZh.contains(q)) {
         score += 12;
       }
