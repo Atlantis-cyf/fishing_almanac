@@ -1,13 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fishing_almanac/data/species_catalog.dart';
 import 'package:fishing_almanac/models/species_catalog_entry.dart';
 import 'package:fishing_almanac/services/species_catalog_service.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
-/// 编辑鱼获：物种中文 / 拉丁 / 英文名模糊搜索，下拉对照本地 [SpeciesCatalog]。
-class SpeciesCatalogSearchField extends StatelessWidget {
+/// 编辑鱼获：物种中文 / 拉丁 / 英文名 / 别名 / 学名异名模糊搜索，
+/// 先本地匹配，再异步查询后端 `/v1/species/search`。
+class SpeciesCatalogSearchField extends StatefulWidget {
   const SpeciesCatalogSearchField({
     super.key,
     required this.controller,
@@ -22,40 +24,104 @@ class SpeciesCatalogSearchField extends StatelessWidget {
   final int optionLimit;
 
   @override
+  State<SpeciesCatalogSearchField> createState() =>
+      _SpeciesCatalogSearchFieldState();
+}
+
+class _SpeciesCatalogSearchFieldState extends State<SpeciesCatalogSearchField> {
+  Timer? _debounce;
+  List<SpeciesCatalogEntry> _remoteResults = const [];
+  String _lastRemoteQuery = '';
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  Future<List<SpeciesCatalogEntry>> _buildOptions(
+      TextEditingValue value) async {
+    final svc = context.read<SpeciesCatalogService>();
+    final localHits = SpeciesCatalog.searchSpeciesForEdit(
+      value.text,
+      limit: widget.optionLimit,
+      entries: svc.hasFetched ? svc.all : null,
+    );
+
+    // Trigger debounced remote search to supplement local results
+    _scheduleRemoteSearch(value.text.trim(), svc);
+
+    // Merge local hits with cached remote results (deduplicate by scientific_name)
+    final seen = <String>{};
+    final merged = <SpeciesCatalogEntry>[];
+    for (final e in localHits) {
+      final key =
+          SpeciesCatalog.normalizeScientificNameKey(e.scientificName);
+      if (seen.add(key)) merged.add(e);
+    }
+    for (final e in _remoteResults) {
+      final key =
+          SpeciesCatalog.normalizeScientificNameKey(e.scientificName);
+      if (seen.add(key)) merged.add(e);
+    }
+
+    return merged.take(widget.optionLimit).toList();
+  }
+
+  void _scheduleRemoteSearch(String query, SpeciesCatalogService svc) {
+    _debounce?.cancel();
+    if (query.isEmpty || query.length < 1) {
+      _remoteResults = const [];
+      _lastRemoteQuery = '';
+      return;
+    }
+    if (query == _lastRemoteQuery) return;
+
+    _debounce = Timer(const Duration(milliseconds: 350), () async {
+      final results = await svc.remoteSearch(query);
+      if (!mounted) return;
+      _lastRemoteQuery = query;
+      _remoteResults = results;
+      // Rebuild autocomplete options by notifying text controller
+      final ctrl = widget.controller;
+      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+      ctrl.notifyListeners();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.sizeOf(context).width;
 
     return RawAutocomplete<SpeciesCatalogEntry>(
-      textEditingController: controller,
-      focusNode: focusNode,
+      textEditingController: widget.controller,
+      focusNode: widget.focusNode,
       displayStringForOption: (SpeciesCatalogEntry option) => option.speciesZh,
-      optionsBuilder: (TextEditingValue value) {
-        final svc = context.read<SpeciesCatalogService>();
-        return SpeciesCatalog.searchSpeciesForEdit(
-          value.text,
-          limit: optionLimit,
-          entries: svc.hasFetched ? svc.all : null,
-        );
-      },
-      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+      optionsBuilder: _buildOptions,
+      fieldViewBuilder:
+          (context, textEditingController, focusNode, onFieldSubmitted) {
         return TextField(
           controller: textEditingController,
           focusNode: focusNode,
           onSubmitted: (_) => onFieldSubmitted(),
           style: const TextStyle(color: AppColors.onSurface),
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search, color: AppColors.onSurfaceVariant),
-            hintText: '搜索或修改鱼种…',
-            hintStyle: TextStyle(color: AppColors.onSurfaceVariant.withValues(alpha: 0.55)),
+            prefixIcon:
+                const Icon(Icons.search, color: AppColors.onSurfaceVariant),
+            hintText: '搜索鱼种名、俗名、学名…',
+            hintStyle: TextStyle(
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.55)),
             filled: true,
-            fillColor: AppColors.surfaceContainerHighest.withValues(alpha: 0.45),
+            fillColor:
+                AppColors.surfaceContainerHighest.withValues(alpha: 0.45),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(999),
               borderSide: BorderSide.none,
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(999),
-              borderSide: BorderSide(color: AppColors.cyanNav.withValues(alpha: 0.45)),
+              borderSide:
+                  BorderSide(color: AppColors.cyanNav.withValues(alpha: 0.45)),
             ),
             contentPadding: const EdgeInsets.symmetric(vertical: 12),
           ),
@@ -74,7 +140,7 @@ class SpeciesCatalogSearchField extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxHeight: optionsMaxHeight,
+                maxHeight: widget.optionsMaxHeight,
                 maxWidth: screenW - 48,
                 minWidth: screenW - 96,
               ),
@@ -88,16 +154,18 @@ class SpeciesCatalogSearchField extends StatelessWidget {
                 ),
                 itemBuilder: (context, index) {
                   final e = list[index];
+                  final aliasDisplay = e.allAliasZh;
                   return InkWell(
                     onTap: () => onSelected(e),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             e.speciesZh,
-                            style: GoogleFonts.manrope(
+                            style: AppFont.manrope(
                               fontWeight: FontWeight.w700,
                               fontSize: 15,
                               color: AppColors.onSurface,
@@ -110,18 +178,20 @@ class SpeciesCatalogSearchField extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppColors.onSurfaceVariant.withValues(alpha: 0.85),
+                              color: AppColors.onSurfaceVariant
+                                  .withValues(alpha: 0.85),
                             ),
                           ),
-                          if (e.aliasZh != null && e.aliasZh!.isNotEmpty) ...[
+                          if (aliasDisplay.isNotEmpty) ...[
                             const SizedBox(height: 2),
                             Text(
-                              '别名: ${e.aliasZh}',
+                              '别名: ${aliasDisplay.join(', ')}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.onSurfaceVariant.withValues(alpha: 0.55),
+                                color: AppColors.onSurfaceVariant
+                                    .withValues(alpha: 0.55),
                               ),
                             ),
                           ],

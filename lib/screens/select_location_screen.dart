@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/services/catch_draft_ai_identify.dart';
+import 'package:fishing_almanac/services/species_identification.dart';
 import 'package:fishing_almanac/data/image_urls.dart';
 import 'package:fishing_almanac/state/catch_draft.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class SelectLocationScreen extends StatefulWidget {
   const SelectLocationScreen({super.key});
@@ -19,10 +23,27 @@ class SelectLocationScreen extends StatefulWidget {
 
 class _SelectLocationScreenState extends State<SelectLocationScreen> {
   bool _offeredChoice = false;
+  bool _startedPrefetchIdentify = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_startedPrefetchIdentify) {
+      _startedPrefetchIdentify = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // 让底部「选择位置方式」先完成绘制/动画，再启动识别，减轻首帧与网络抢占 UI 线程的卡顿感。
+        final draft = context.read<CatchDraft>();
+        final svc = context.read<SpeciesIdentificationService>();
+        final analytics = context.read<AnalyticsClient>();
+        Future<void>.delayed(const Duration(milliseconds: 220), () {
+          if (!mounted) return;
+          unawaited(
+            performCatchDraftIdentification(draft: draft, svc: svc, analytics: analytics),
+          );
+        });
+      });
+    }
     if (_offeredChoice) return;
     _offeredChoice = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -48,7 +69,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                 Text(
                   '选择位置方式',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 18, color: AppColors.onSurface),
+                  style: AppFont.manrope(fontWeight: FontWeight.w800, fontSize: 18, color: AppColors.onSurface),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -218,7 +239,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                       ),
                       Text(
                         '选择位置',
-                        style: GoogleFonts.manrope(
+                        style: AppFont.manrope(
                           fontWeight: FontWeight.w700,
                           fontSize: 20,
                           color: AppColors.cyanNav,
@@ -292,7 +313,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 draft.locationLabel,
-                                style: GoogleFonts.manrope(
+                                style: AppFont.manrope(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
                                   color: AppColors.primary,
@@ -336,7 +357,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                     children: [
                       Text(
                         '下一步：编辑鱼获详情',
-                        style: GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 17),
+                        style: AppFont.manrope(fontWeight: FontWeight.w600, fontSize: 17),
                       ),
                       const SizedBox(width: 8),
                       const Icon(Icons.arrow_forward),

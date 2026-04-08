@@ -17,15 +17,14 @@ import 'package:fishing_almanac/services/species_catalog_service.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/widgets/app_network_image.dart';
 import 'package:fishing_almanac/widgets/bottom_nav.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class EncyclopediaScreen extends StatefulWidget {
   const EncyclopediaScreen({super.key});
 
   static String _categoryForCatalog(SpeciesCatalogEntry e) {
-    if (e.isRare) return 'rare';
-    final d = e.rarityDisplay ?? '';
-    if (d.contains('稀有') || d.contains('保护')) return 'rare';
+    if (e.scientificName == SpeciesCatalog.otherScientificName) return 'nearshore';
+    if (e.countsAsRareSpecies) return 'rare';
     if (e.taxonomyZh.contains('软骨')) return 'deep';
     return 'nearshore';
   }
@@ -54,6 +53,21 @@ class EncyclopediaScreen extends StatefulWidget {
 enum _EncyclopediaTab { my, all, rare }
 
 class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
+  Widget _otherPlaceholderImage() {
+    return Container(
+      color: AppColors.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: const Text(
+        '?',
+        style: TextStyle(
+          fontSize: 56,
+          fontWeight: FontWeight.w800,
+          color: AppColors.outline,
+        ),
+      ),
+    );
+  }
+
   _EncyclopediaTab _tab = _EncyclopediaTab.my;
 
   String? _error;
@@ -365,7 +379,7 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                 ),
                 title: Text(
                   '海钓图鉴',
-                  style: GoogleFonts.manrope(
+                  style: AppFont.manrope(
                     fontWeight: FontWeight.w700,
                     fontSize: 20,
                     color: AppColors.cyanNav,
@@ -400,7 +414,7 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                     children: [
                       Text(
                         '生物索引',
-                        style: GoogleFonts.manrope(
+                        style: AppFont.manrope(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
                           color: AppColors.onSurface,
@@ -484,7 +498,7 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '$_catalogUnlockedSpeciesCount / $_totalCount',
-                                  style: GoogleFonts.manrope(
+                                  style: AppFont.manrope(
                                     fontSize: 24,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.cyanNav,
@@ -559,7 +573,10 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    if (s != null)
+                                    if (s != null &&
+                                        s.speciesScientificName == SpeciesCatalog.otherScientificName)
+                                      _otherPlaceholderImage()
+                                    else if (s != null)
                                       AppNetworkImage(url: s.imageUrl, fit: BoxFit.cover)
                                     else
                                       Container(color: AppColors.surfaceContainerHighest),

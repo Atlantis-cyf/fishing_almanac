@@ -10,7 +10,7 @@ import 'package:fishing_almanac/state/catch_draft.dart';
 import 'package:fishing_almanac/state/user_profile.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/widgets/app_network_image.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -21,7 +21,7 @@ class ProfileScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerHigh,
-        title: Text('修改用户名', style: GoogleFonts.manrope(fontWeight: FontWeight.w700)),
+        title: Text('修改用户名', style: AppFont.manrope(fontWeight: FontWeight.w700)),
         content: TextField(
           controller: c,
           autofocus: true,
@@ -78,7 +78,7 @@ class ProfileScreen extends StatelessWidget {
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: AppColors.surfaceContainerHigh,
-          title: Text('修改密码', style: GoogleFonts.manrope(fontWeight: FontWeight.w700)),
+          title: Text('修改密码', style: AppFont.manrope(fontWeight: FontWeight.w700)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -203,7 +203,7 @@ class ProfileScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   Text(
                     '船员档案',
-                    style: GoogleFonts.manrope(
+                    style: AppFont.manrope(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
                       color: AppColors.primary,
@@ -282,7 +282,7 @@ class ProfileScreen extends StatelessWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     profile.displayName,
-                                    style: GoogleFonts.manrope(
+                                    style: AppFont.manrope(
                                       fontWeight: FontWeight.w700,
                                       color: AppColors.primary,
                                       fontSize: 16,
@@ -387,7 +387,7 @@ class ProfileScreen extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           '退出登录 (断开连接)',
-                          style: GoogleFonts.manrope(fontWeight: FontWeight.w700, letterSpacing: 2),
+                          style: AppFont.manrope(fontWeight: FontWeight.w700, letterSpacing: 2),
                         ),
                       ],
                     ),

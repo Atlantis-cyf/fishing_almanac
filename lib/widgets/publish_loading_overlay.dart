@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 import 'package:fishing_almanac/theme/app_colors.dart';
 
@@ -53,7 +53,7 @@ class _PublishLoadingOverlayState extends State<PublishLoadingOverlay>
                 children: [
                   Text(
                     widget.message,
-                    style: GoogleFonts.manrope(
+                    style: AppFont.manrope(
                       fontWeight: FontWeight.w800,
                       fontSize: 22,
                       color: widget.accentColor,

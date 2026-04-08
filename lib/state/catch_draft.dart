@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -37,9 +36,62 @@ class CatchDraft extends ChangeNotifier {
   bool aiInCatalog = true;
   bool imageAuthorized = false;
 
+  // --- AI 识别缓存（选点页预取 + 编辑页展示，按 [aiMediaSeq] 失效）---
+
+  /// 换图自增；与 [aiIdentifyValidForMediaSeq] 一致时表示当前缓存有效。
+  int aiMediaSeq = 0;
+
+  bool aiIdentifyInFlight = false;
+
+  /// 非空且等于 [aiMediaSeq] 时，[aiCachedScientificName] 等与当前照片对应。
+  int? aiIdentifyValidForMediaSeq;
+
+  String? aiCachedScientificName;
+  double? aiCachedConfidence;
+  bool aiCachedApiFailed = false;
+  int? aiIdentifyLastApiStatusCode;
+  String? aiIdentifyLastApiMessage;
+
+  /// 编辑页消费后弹出「非鱼类」说明。
+  bool aiPendingNotFishDialog = false;
+
+  /// 编辑页消费后弹出识别失败 SnackBar（预取阶段不弹，避免打断选点）。
+  bool aiPendingIdentifyFailureSnack = false;
+
+  void _invalidateAiIdentifyCache() {
+    aiIdentifyInFlight = false;
+    aiIdentifyValidForMediaSeq = null;
+    aiCachedScientificName = null;
+    aiCachedConfidence = null;
+    aiCachedApiFailed = false;
+    aiIdentifyLastApiStatusCode = null;
+    aiIdentifyLastApiMessage = null;
+    aiPendingNotFishDialog = false;
+    aiPendingIdentifyFailureSnack = false;
+  }
+
+  bool get hasValidAiIdentifyCache =>
+      aiIdentifyValidForMediaSeq != null && aiIdentifyValidForMediaSeq == aiMediaSeq;
+
+  /// 供 [performCatchDraftIdentification] 等在类外触发重建（避免外部调用受保护的 [notifyListeners]）。
+  void signalListeners() => notifyListeners();
+
   void setPickedImageBytes(List<int> bytes) {
     imageBytes = Uint8List.fromList(bytes);
     imageUrlFallback = null;
+    aiMediaSeq++;
+    _invalidateAiIdentifyCache();
+    notifyListeners();
+  }
+
+  /// 用户更换照片后重置与 AI/鱼种相关的草稿，避免沿用上一张图的元数据。
+  void resetAiMetaForNewImage() {
+    aiIsFish = true;
+    aiSpeciesZh = null;
+    aiTaxonomyZh = null;
+    aiInCatalog = true;
+    imageAuthorized = false;
+    scientificName = '';
     notifyListeners();
   }
 
@@ -116,6 +168,8 @@ class CatchDraft extends ChangeNotifier {
     aiTaxonomyZh = null;
     aiInCatalog = true;
     imageAuthorized = false;
+    aiMediaSeq = 0;
+    _invalidateAiIdentifyCache();
     notifyListeners();
   }
 
@@ -133,6 +187,8 @@ class CatchDraft extends ChangeNotifier {
     locationLabel = p.locationLabel;
     lat = p.lat;
     lng = p.lng;
+    aiMediaSeq++;
+    _invalidateAiIdentifyCache();
     notifyListeners();
   }
 

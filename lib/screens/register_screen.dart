@@ -9,7 +9,7 @@ import 'package:fishing_almanac/auth/auth_repository.dart';
 import 'package:fishing_almanac/state/user_profile.dart';
 import 'package:fishing_almanac/data/image_urls.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -138,7 +138,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       Text(
                         'DEEP SEA',
-                        style: GoogleFonts.manrope(
+                        style: AppFont.manrope(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           color: const Color(0xFF22d3ee),
@@ -167,7 +167,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               children: [
                                 Text(
                                   '注册新观察员',
-                                  style: GoogleFonts.manrope(
+                                  style: AppFont.manrope(
                                     fontSize: 32,
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.primaryContainer,
@@ -275,7 +275,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                             children: [
                                               Text(
                                                 '开启深海之旅',
-                                                style: GoogleFonts.manrope(
+                                                style: AppFont.manrope(
                                                   fontSize: 18,
                                                   fontWeight: FontWeight.w800,
                                                 ),

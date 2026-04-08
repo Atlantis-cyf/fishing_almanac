@@ -20,7 +20,7 @@ import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/catch_ui_constants.dart';
 import 'package:fishing_almanac/widgets/bottom_nav.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 /// 信息流加载阶段（初始请求；成功后的「加载更多」用 [_FeedDetailScreenState._loadingMore]）。
 enum FeedDetailLoadPhase {
@@ -424,7 +424,7 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
         ),
         title: Text(
           title,
-          style: GoogleFonts.manrope(
+          style: AppFont.manrope(
             fontWeight: FontWeight.w700,
             fontSize: 18,
             color: const Color(0xFFc3f5ff),
@@ -652,7 +652,7 @@ class _FeedItemCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   item.displaySpeciesZh,
-                  style: GoogleFonts.manrope(
+                  style: AppFont.manrope(
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
                     color: AppColors.primary,
@@ -702,7 +702,7 @@ class _Tag extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: GoogleFonts.manrope(
+        style: AppFont.manrope(
           fontSize: 12,
           fontWeight: FontWeight.w700,
           color: AppColors.primary,

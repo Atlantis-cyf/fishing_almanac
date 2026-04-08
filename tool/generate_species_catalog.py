@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Generate lib/data/species_catalog_data.g.dart from book CSV + image manifest.
+r"""Generate lib/data/species_catalog_data.g.dart from CSV + local image folder.
 
-Reads:
-  D:\\fishingapp-cursor\\book\\species_library_taxonomy_image_updated.csv
-  D:\\fishingapp-cursor\\book\\species_images\\species_images_manifest.csv
+Default reads:
+  D:\fishingapp-cursor\book\2.0豆包\抓取图片\species_catalog_wikipedia_images_filled.csv
+  D:\fishingapp-cursor\book\2.0豆包\抓取图片\species_images_all\ (optional local images)
 
-Copies images into: fishing_almanac/assets/species/
+Copies local images into: fishing_almanac/assets/species/
+If local image is missing, keeps CSV image_url as network fallback.
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import shutil
 import sys
-from io import StringIO
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,11 +23,11 @@ _TOOL = Path(__file__).resolve().parent
 if str(_TOOL) not in sys.path:
     sys.path.insert(0, str(_TOOL))
 
-from species_dedupe_core import CANON_SPECIES_ZH, FIELDNAMES, dedupe_taxonomy_row_dicts
+from species_dedupe_core import CANON_SPECIES_ZH, dedupe_taxonomy_row_dicts
 
-BOOK = Path(r"D:\fishingapp-cursor\book")
-TAXONOMY_CSV = BOOK / "species_library_taxonomy_image_updated.csv"
-MANIFEST_CSV = BOOK / "species_images" / "species_images_manifest.csv"
+BOOK = Path(r"D:\fishingapp-cursor\book\2.0豆包\抓取图片")
+DEFAULT_TAXONOMY_CSV = BOOK / "species_catalog_wikipedia_images_filled.csv"
+DEFAULT_IMAGES_DIR = BOOK / "species_images_all"
 ASSETS_DIR = ROOT / "assets" / "species"
 OUT_DART = ROOT / "lib" / "data" / "species_catalog_data.g.dart"
 
@@ -41,54 +42,82 @@ def parse_bool(raw: str) -> bool:
     return t in ("TRUE", "1", "YES", "Y", "T")
 
 
-def main() -> None:
-    manifest: dict[str, str] = {}
-    with MANIFEST_CSV.open(encoding="utf-8-sig", newline="") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            zh = (row.get("species_zh") or "").strip()
-            lf = (row.get("local_file") or "").strip()
-            if zh and lf:
-                manifest[zh] = lf
+def _pick(row: dict[str, str], *keys: str) -> str:
+    for k in keys:
+        v = row.get(k)
+        if v is not None:
+            return str(v)
+    return ""
 
+
+def _norm_rows(csv_path: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    raw = TAXONOMY_CSV.read_bytes()
-    text = None
-    for enc in ("utf-8-sig", "gbk", "utf-8"):
-        try:
-            text = raw.decode(enc)
-            break
-        except UnicodeDecodeError:
-            continue
-    if text is None:
-        text = raw.decode("utf-8", errors="replace")
+    with csv_path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if not row:
+                continue
+            if all(not str(v or "").strip() for v in row.values()):
+                continue
+            rows.append(
+                {
+                    "id": _pick(row, "id", "species_id").strip(),
+                    "species_zh": _pick(row, "species_zh").strip(),
+                    "scientific_name": _pick(row, "scientific_name").strip(),
+                    "taxonomy_zh": _pick(row, "taxonomy_zh").strip(),
+                    "is_rare": _pick(row, "is_rare").strip(),
+                    "image_url": _pick(row, "image_url").strip(),
+                    "max_length_m": _pick(row, "max_length_m").strip(),
+                    "max_weight_kg": _pick(row, "max_weight_kg").strip(),
+                    "description_zh": _pick(row, "description_zh").strip(),
+                    "name_en": _pick(row, "name_en").strip(),
+                    "encyclopedia_category": _pick(row, "encyclopedia_category").strip(),
+                    "rarity_display": _pick(row, "rarity_display").strip(),
+                    "created_at": _pick(row, "created_at").strip(),
+                    "alias_zh": _pick(row, "alias_zh").strip(),
+                }
+            )
+    return rows
 
-    f = StringIO(text)
-    reader = csv.reader(f)
-    header = next(reader, None)
-    if not header:
-        raise SystemExit("empty taxonomy csv")
-    for raw in reader:
-        if not raw or all(not (c or "").strip() for c in raw):
-            continue
-        while len(raw) < len(FIELDNAMES):
-            raw.append("")
-        row = dict(zip(FIELDNAMES, raw[: len(FIELDNAMES)]))
-        rows.append(row)
 
+def _build_local_image_map(images_dir: Path) -> dict[str, str]:
+    by_zh: dict[str, str] = {}
+    if not images_dir.is_dir():
+        return by_zh
+    for p in images_dir.iterdir():
+        if not p.is_file():
+            continue
+        ext = p.suffix.lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+            continue
+        by_zh[p.stem] = p.name
+    return by_zh
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Generate species catalog Dart data from CSV + local images.")
+    ap.add_argument("--csv", type=Path, default=DEFAULT_TAXONOMY_CSV)
+    ap.add_argument("--images-dir", type=Path, default=DEFAULT_IMAGES_DIR)
+    args = ap.parse_args()
+
+    csv_path: Path = args.csv
+    images_dir: Path = args.images_dir
+    if not csv_path.is_file():
+        raise SystemExit(f"missing taxonomy csv: {csv_path}")
+
+    rows = _norm_rows(csv_path)
     before_n = len(rows)
     rows = dedupe_taxonomy_row_dicts(rows)
     if len(rows) < before_n:
         print(f"Deduped by scientific_name: {before_n} -> {len(rows)} rows (kept smallest id)")
 
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-    src_dir = BOOK / "species_images"
+    local_images = _build_local_image_map(images_dir)
     copied = 0
-    for zh, lf in manifest.items():
-        src = src_dir / lf
+    for _, lf in local_images.items():
+        src = images_dir / lf
         dst = ASSETS_DIR / lf
         if not src.is_file():
-            print(f"WARN missing image file: {src}")
             continue
         shutil.copy2(src, dst)
         copied += 1
@@ -115,8 +144,6 @@ def main() -> None:
         name_en = (row.get("name_en") or "").strip()
         enc_cat = (row.get("encyclopedia_category") or "").strip()
         rarity_disp = (row.get("rarity_display") or "").strip()
-        if rarity_disp.upper() in ("FALSE", "TRUE", ""):
-            rarity_disp = ""
         if rarity_disp.upper() in ("FALSE", "TRUE", "NONE", ""):
             rarity_disp = ""
         alias_zh = (row.get("alias_zh") or "").strip()
@@ -129,11 +156,12 @@ def main() -> None:
         except ValueError:
             max_kg = 0.0
 
-        lf = manifest.get(zh)
-        if not lf:
-            print(f"WARN no manifest image for: {zh}")
-            lf = "鲯鳅.jpg"
-        asset_path = f"assets/species/{lf}"
+        lf = local_images.get(zh)
+        if lf:
+            image_ref = f"assets/species/{lf}"
+        else:
+            image_ref = (row.get("image_url") or "").strip() or "assets/species/鲯鳅.jpg"
+            print(f"WARN no local image for: {zh}")
 
         def opt_field(s: str | None) -> str:
             if not s:
@@ -146,7 +174,7 @@ def main() -> None:
         lines.append(f"    scientificName: {dart_str(sci)},")
         lines.append(f"    taxonomyZh: {dart_str(tax)},")
         lines.append(f"    isRare: {str(rare).lower()},")
-        lines.append(f"    imageUrl: {dart_str(asset_path)},")
+        lines.append(f"    imageUrl: {dart_str(image_ref)},")
         lines.append(f"    maxLengthM: {max_m},")
         lines.append(f"    maxWeightKg: {max_kg},")
         lines.append(f"    descriptionZh: {dart_str(desc)},")
@@ -156,7 +184,6 @@ def main() -> None:
         lines.append(f"    aliasZh: {opt_field(alias_zh)},")
         lines.append("  ),")
 
-    # Placeholders for catches FK / free-text (same asset as a known fish for offline hero).
     lines.append("  SpeciesCatalogEntry(")
     lines.append("    id: 100,")
     lines.append("    speciesZh: '未确定',")
@@ -187,7 +214,6 @@ def main() -> None:
     lines.append("    rarityDisplay: null,")
     lines.append("    aliasZh: null,")
     lines.append("  ),")
-
     lines.append("];")
     lines.append("")
 
@@ -195,5 +221,5 @@ def main() -> None:
     print(f"Wrote {OUT_DART}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -16,11 +16,11 @@
 
 | 实现 | 说明 |
 |------|------|
-| `StubSpeciesIdentificationService` | 默认；无网开发，无照片时返回占位 `—` |
-| `RemoteSpeciesIdentificationService` | `POST` [SpeciesIdentifyEndpoints.path]；有本地字节走 **multipart**（字段名 `SPECIES_IDENTIFY_IMAGE_FIELD`，默认 `image`），仅 URL 时 **JSON** `{"image_url":"..."}`；Bearer 与 [ApiClient] 一致 |
+| `StubSpeciesIdentificationService` | 纯离线占位；有图时固定返回示例学名（勿与真实识别混淆） |
+| `RemoteSpeciesIdentificationService` | `POST` [SpeciesIdentifyEndpoints.path]（豆包等后端）；有本地字节走 **multipart**（字段名 `SPECIES_IDENTIFY_IMAGE_FIELD`，默认 `image`），仅 URL 时 **JSON** `{"image_url":"..."}`；Bearer 与 [ApiClient] 一致 |
 
-切换：`FishingAlmanacApp(useRemoteSpeciesIdentification: true)` 或  
-`--dart-define=USE_REMOTE_SPECIES_IDENTIFICATION=true`（默认 `false`）。
+切换：`FishingAlmanacApp(useRemoteSpeciesIdentification: false)` 或  
+`--dart-define=USE_REMOTE_SPECIES_IDENTIFICATION=false`（默认 **true**，走后端识别）。
 
 成功响应解析见 `SpeciesIdentifyPayload`：优先根级或 `data` 内 `scientific_name` / `scientificName`；仍可读 `species_zh` / `speciesZh` 并映射为学名。`confidence` 支持 0–1 或 0–100。
 

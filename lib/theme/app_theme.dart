@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 abstract final class AppTheme {
   static ThemeData dark() {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: 'Inter',
+      fontFamilyFallback: AppFont.cjkFallback,
       colorScheme: ColorScheme.dark(
         surface: AppColors.surface,
         onSurface: AppColors.onSurface,
@@ -29,7 +31,8 @@ abstract final class AppTheme {
     );
 
     return base.copyWith(
-      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
+      textTheme: base.textTheme.apply(
+        fontFamily: 'Inter',
         bodyColor: AppColors.onSurface,
         displayColor: AppColors.onSurface,
       ),
@@ -59,11 +62,11 @@ abstract final class AppTheme {
   }
 
   static TextStyle headlineLarge({Color? color}) =>
-      GoogleFonts.manrope(fontWeight: FontWeight.w800, color: color ?? AppColors.onSurface);
+      AppFont.manrope(fontWeight: FontWeight.w800, color: color ?? AppColors.onSurface);
 
   static TextStyle headlineMedium({Color? color}) =>
-      GoogleFonts.manrope(fontWeight: FontWeight.w700, color: color ?? AppColors.onSurface);
+      AppFont.manrope(fontWeight: FontWeight.w700, color: color ?? AppColors.onSurface);
 
   static TextStyle titleNav({Color? color}) =>
-      GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 20, color: color);
+      AppFont.manrope(fontWeight: FontWeight.w700, fontSize: 20, color: color);
 }

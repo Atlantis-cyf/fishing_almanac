@@ -8,7 +8,7 @@ import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/catch_ui_constants.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
 import 'package:fishing_almanac/widgets/photo_adjust_dialog.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class RecordScreen extends StatefulWidget {
   const RecordScreen({super.key});
@@ -30,6 +30,8 @@ class _RecordScreenState extends State<RecordScreen> {
   Future<void> _pickPhoto() async {
     final x = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 88);
     if (x == null || !mounted) return;
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
     final bytes = await x.readAsBytes();
     if (!mounted) return;
     context.read<CatchDraft>().setPickedImageBytes(bytes);
@@ -73,7 +75,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   ),
                   Text(
                     '记录鱼获',
-                    style: GoogleFonts.manrope(
+                    style: AppFont.manrope(
                       fontWeight: FontWeight.w700,
                       fontSize: 20,
                       color: AppColors.cyanNav,
@@ -109,7 +111,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 children: [
                   Text(
                     '记录鱼获瞬间',
-                    style: GoogleFonts.manrope(
+                    style: AppFont.manrope(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
                       color: AppColors.onSurface,
@@ -208,7 +210,7 @@ class _RecordScreenState extends State<RecordScreen> {
                                   const SizedBox(height: 16),
                                   Text(
                                     '点击打开相册',
-                                    style: GoogleFonts.manrope(
+                                    style: AppFont.manrope(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
                                       color: AppColors.primary,
@@ -250,7 +252,7 @@ class _RecordScreenState extends State<RecordScreen> {
                             children: [
                               Text(
                                 '拍摄建议',
-                                style: GoogleFonts.manrope(
+                                style: AppFont.manrope(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
                                   color: AppColors.onSurface,
@@ -294,7 +296,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 children: [
                   Text(
                     '下一步：选择位置',
-                    style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 17),
+                    style: AppFont.manrope(fontWeight: FontWeight.w700, fontSize: 17),
                   ),
                   const SizedBox(width: 8),
                   const Icon(Icons.arrow_forward),

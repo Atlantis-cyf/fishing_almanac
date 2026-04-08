@@ -71,11 +71,13 @@ class StubSpeciesIdentificationService implements SpeciesIdentificationService {
     if (!hasBytes && !hasUrl) {
       return const SpeciesIdentificationResult(scientificName: '—', confidence: 0);
     }
-    return SpeciesIdentificationResult(
-      scientificName: 'Thunnus thynnus',
-      confidence: 0.98,
-      rawLabel: 'bluefin_tuna_stub',
-      metadata: const {'engine': 'stub', 'version': 0},
+    // 占位：勿使用易与真实鱼种混淆的学名；需要真实识别请启用 Remote（默认已开）。
+    return const SpeciesIdentificationResult(
+      scientificName: 'Indeterminate',
+      confidence: 0,
+      speciesZh: '未确定',
+      rawLabel: 'stub_no_model',
+      metadata: {'engine': 'stub', 'version': 0},
     );
   }
 }

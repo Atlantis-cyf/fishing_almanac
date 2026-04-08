@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fishing_almanac/data/image_urls.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -73,7 +73,7 @@ class WelcomeScreen extends StatelessWidget {
                                     ),
                                     child: Text(
                                       'THE DEEP OBSERVER',
-                                      style: GoogleFonts.manrope(
+                                      style: AppFont.manrope(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w800,
                                         letterSpacing: 3.2,
@@ -98,7 +98,7 @@ class WelcomeScreen extends StatelessWidget {
                                         children: [
                                           Text(
                                             '海钓图鉴',
-                                            style: GoogleFonts.manrope(
+                                            style: AppFont.manrope(
                                               fontSize: 24,
                                               fontWeight: FontWeight.w800,
                                               color: AppColors.primary,
@@ -163,7 +163,7 @@ class WelcomeScreen extends StatelessWidget {
                                     const SizedBox(height: 24),
                                     Text(
                                       'AI 智能识别',
-                                      style: GoogleFonts.manrope(
+                                      style: AppFont.manrope(
                                         fontSize: 28,
                                         fontWeight: FontWeight.w800,
                                         color: AppColors.onSurface,
@@ -245,7 +245,7 @@ class WelcomeScreen extends StatelessWidget {
                                     children: [
                                       Text(
                                         '进入手册',
-                                        style: GoogleFonts.manrope(
+                                        style: AppFont.manrope(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w800,
                                         ),

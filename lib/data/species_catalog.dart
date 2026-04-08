@@ -6,6 +6,20 @@ part 'species_catalog_data.g.dart';
 /// 图片路径形如 `assets/species/<中文名>.jpg`，见 `pubspec.yaml`。
 abstract final class SpeciesCatalog {
   static const List<SpeciesCatalogEntry> all = kSpeciesCatalogAll;
+  static const String otherScientificName = 'Other';
+  static const String otherSpeciesZh = '其它';
+
+  static const SpeciesCatalogEntry otherEntry = SpeciesCatalogEntry(
+    id: -1,
+    speciesZh: otherSpeciesZh,
+    scientificName: otherScientificName,
+    taxonomyZh: '未识别分类',
+    isRare: false,
+    imageUrl: '',
+    maxLengthM: 0,
+    maxWeightKg: 0,
+    descriptionZh: '该目录用于收录 AI 判断为非鱼或无法有效识别、但用户仍选择保留的记录。',
+  );
 
   /// 与鱼获、外键对齐：空白折叠 + 大小写不敏感。
   static String normalizeScientificNameKey(String raw) {
@@ -15,6 +29,7 @@ abstract final class SpeciesCatalog {
   static SpeciesCatalogEntry? tryByScientificName(String raw) {
     final k = normalizeScientificNameKey(raw);
     if (k.isEmpty) return null;
+    if (k == normalizeScientificNameKey(otherScientificName)) return otherEntry;
     for (final e in all) {
       if (normalizeScientificNameKey(e.scientificName) == k) return e;
     }
@@ -24,6 +39,7 @@ abstract final class SpeciesCatalog {
   static SpeciesCatalogEntry? tryBySpeciesZh(String speciesFilterZh) {
     final k = speciesFilterZh.trim();
     if (k.isEmpty) return null;
+    if (k == otherSpeciesZh) return otherEntry;
     for (final e in all) {
       if (e.speciesZh == k) return e;
     }
@@ -63,15 +79,20 @@ abstract final class SpeciesCatalog {
         score += en.startsWith(qLower) ? 40 : 28;
       }
 
-      final alias = e.aliasZh ?? '';
-      if (alias.isNotEmpty) {
-        for (final a in alias.split(',')) {
-          final at = a.trim();
-          if (at.isEmpty) continue;
-          if (at.contains(q)) {
-            score += at.startsWith(q) ? 90 : 65;
-            break;
-          }
+      // Match against all aliases (legacy comma-separated + normalized list)
+      for (final at in e.allAliasZh) {
+        if (at.contains(q)) {
+          score += at.startsWith(q) ? 90 : 65;
+          break;
+        }
+      }
+
+      // Match against scientific name synonyms
+      for (final syn in e.allSynonyms) {
+        final synLower = syn.toLowerCase();
+        if (synLower.contains(qLower)) {
+          score += synLower.startsWith(qLower) ? 50 : 35;
+          break;
         }
       }
 
@@ -135,6 +156,7 @@ abstract final class SpeciesCatalog {
   static String resolveScientificNameFromUserInput(String raw) {
     final t = raw.trim();
     if (t.isEmpty) return '';
+    if (t == otherSpeciesZh) return otherScientificName;
     if (t == '未确定') return 'Indeterminate';
     if (t == '未命名鱼种') return 'Unnamed species';
     final byZh = tryBySpeciesZh(t);
@@ -148,6 +170,9 @@ abstract final class SpeciesCatalog {
   static String displayZhForScientific(String scientificName) {
     final s = scientificName.trim();
     if (s.isEmpty) return '';
+    if (normalizeScientificNameKey(s) == normalizeScientificNameKey(otherScientificName)) {
+      return otherSpeciesZh;
+    }
     return tryByScientificName(s)?.speciesZh ?? s;
   }
 }

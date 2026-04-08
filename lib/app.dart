@@ -31,7 +31,7 @@ class FishingAlmanacApp extends StatefulWidget {
   /// 为 null 时使用 `--dart-define=USE_REMOTE_CATCH_REPOSITORY=true`（默认 false）。
   final bool? useRemoteCatchRepository;
 
-  /// 为 null 时使用 `--dart-define=USE_REMOTE_SPECIES_IDENTIFICATION=true`（默认 false）。
+  /// 为 null 时使用 `--dart-define=USE_REMOTE_SPECIES_IDENTIFICATION=...`（默认 true，走后端识别）。
   final bool? useRemoteSpeciesIdentification;
 
   @override
@@ -61,8 +61,9 @@ class _FishingAlmanacAppState extends State<FishingAlmanacApp> {
   }
 
   SpeciesIdentificationService _createSpeciesIdentificationService() {
+    // 默认走后端豆包识别；仅当显式关闭时使用本地 Stub（Stub 固定返回 Thunnus thynnus，易与真实识别混淆）。
     final useRemote = widget.useRemoteSpeciesIdentification ??
-        const bool.fromEnvironment('USE_REMOTE_SPECIES_IDENTIFICATION', defaultValue: false);
+        const bool.fromEnvironment('USE_REMOTE_SPECIES_IDENTIFICATION', defaultValue: true);
     if (useRemote) {
       return RemoteSpeciesIdentificationService(api: _apiClient);
     }

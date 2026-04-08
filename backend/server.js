@@ -144,6 +144,105 @@ async function requireUser(req) {
   return userData.user;
 }
 
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isAdminUser(user) {
+  if (!user) return false;
+  const email = String(user.email || '').toLowerCase();
+  return ADMIN_EMAILS.includes(email) || ADMIN_USER_IDS.includes(String(user.id || ''));
+}
+
+async function requireAdmin(req, res) {
+  const user = await requireUser(req);
+  if (!user) {
+    jsonError(res, 401, '请先登录');
+    return null;
+  }
+  if (!isAdminUser(user)) {
+    jsonError(res, 403, '无后台管理权限');
+    return null;
+  }
+  return user;
+}
+
+async function logSpeciesAdminAction({
+  actorUserId,
+  action,
+  speciesId = null,
+  speciesScientificName = null,
+  beforeData = null,
+  afterData = null,
+  metadata = null,
+}) {
+  try {
+    await supabaseAdmin.from('species_admin_audit_logs').insert({
+      actor_user_id: actorUserId || null,
+      action,
+      species_id: speciesId,
+      species_scientific_name: speciesScientificName,
+      before_data: beforeData,
+      after_data: afterData,
+      metadata,
+    });
+  } catch (e) {
+    console.warn('[admin/audit] log insert failed (non-fatal):', e.message);
+  }
+}
+
+async function createSpeciesSnapshot({ note, actorUserId }) {
+  const { data: head, error: headErr } = await supabaseAdmin
+    .from('species_catalog_snapshots')
+    .insert({ note: note || null, created_by: actorUserId || null })
+    .select('id, created_at, note')
+    .single();
+  if (headErr) throw new Error(`create snapshot failed: ${headErr.message}`);
+
+  const snapshotId = head.id;
+
+  const [{ data: speciesRows }, { data: aliasRows }, { data: synonymRows }] = await Promise.all([
+    supabaseAdmin.from('species_catalog').select('*'),
+    supabaseAdmin.from('species_aliases').select('*'),
+    supabaseAdmin.from('species_synonyms').select('*'),
+  ]);
+
+  if (speciesRows && speciesRows.length > 0) {
+    const payload = speciesRows.map((r) => ({
+      snapshot_id: snapshotId,
+      scientific_name: r.scientific_name,
+      row_data: r,
+    }));
+    const { error } = await supabaseAdmin.from('species_catalog_snapshot_rows').insert(payload);
+    if (error) throw new Error(`snapshot species rows failed: ${error.message}`);
+  }
+
+  if (aliasRows && aliasRows.length > 0) {
+    const payload = aliasRows.map((r) => ({
+      snapshot_id: snapshotId,
+      alias_data: r,
+    }));
+    const { error } = await supabaseAdmin.from('species_aliases_snapshot_rows').insert(payload);
+    if (error) throw new Error(`snapshot alias rows failed: ${error.message}`);
+  }
+
+  if (synonymRows && synonymRows.length > 0) {
+    const payload = synonymRows.map((r) => ({
+      snapshot_id: snapshotId,
+      synonym_data: r,
+    }));
+    const { error } = await supabaseAdmin.from('species_synonyms_snapshot_rows').insert(payload);
+    if (error) throw new Error(`snapshot synonym rows failed: ${error.message}`);
+  }
+
+  return head;
+}
+
 function parseNumber(v, fallback = 0) {
   if (v === undefined || v === null) return fallback;
   const s = String(v).trim();
@@ -186,6 +285,70 @@ function normalizeScientificNameKey(raw) {
   return String(raw || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/**
+ * Resolve a scientific name to its canonical form.
+ * 1. Direct match in species_catalog → return as-is
+ * 2. Match in species_synonyms → return the canonical_scientific_name
+ * 3. No match → return the original name unchanged
+ */
+async function resolveCanonicalScientificName(scientificName) {
+  const sn = String(scientificName || '').trim();
+  if (!sn || sn === 'Indeterminate') return sn;
+
+  // Direct match
+  const { data: direct } = await supabaseAdmin
+    .from('species_catalog')
+    .select('scientific_name')
+    .eq('scientific_name', sn)
+    .maybeSingle();
+  if (direct) return direct.scientific_name;
+
+  // Synonym lookup (case-insensitive)
+  const { data: syn } = await supabaseAdmin
+    .from('species_synonyms')
+    .select('canonical_scientific_name')
+    .ilike('synonym', sn)
+    .maybeSingle();
+  if (syn) return syn.canonical_scientific_name;
+
+  return sn;
+}
+
+/**
+ * Resolve a Chinese species name to a species_catalog entry.
+ * Checks: species_zh exact → species_aliases → null
+ */
+async function resolveSpeciesByZh(zhName) {
+  const zh = String(zhName || '').trim();
+  if (!zh) return null;
+
+  // Direct Chinese name match
+  const { data: direct } = await supabaseAdmin
+    .from('species_catalog')
+    .select('id, scientific_name, species_zh')
+    .eq('species_zh', zh)
+    .maybeSingle();
+  if (direct) return direct;
+
+  // Alias lookup
+  const { data: alias } = await supabaseAdmin
+    .from('species_aliases')
+    .select('species_id')
+    .eq('alias_zh', zh)
+    .limit(1)
+    .maybeSingle();
+  if (alias) {
+    const { data: entry } = await supabaseAdmin
+      .from('species_catalog')
+      .select('id, scientific_name, species_zh')
+      .eq('id', alias.species_id)
+      .maybeSingle();
+    if (entry) return entry;
+  }
+
+  return null;
+}
+
 function normalizeCatchRow(row) {
   if (!row) return row;
   const occurredAtMs = toFiniteNumber(row.occurred_at_ms);
@@ -222,6 +385,7 @@ function scientificNameFromBody(body) {
   let sn = String(m.scientific_name || m.scientificName || '').trim();
   if (sn) return sn;
   const zh = String(m.species_zh || m.speciesZh || '').trim();
+  if (zh === '其它') return 'Other';
   if (zh === '未确定') return 'Indeterminate';
   if (zh === '未命名鱼种') return 'Unnamed species';
   return zh;
@@ -233,6 +397,32 @@ function isIdentifiedScientificName(scientificName) {
   if (s === 'Indeterminate') return false;
   if (s === 'Unnamed species') return false;
   return true;
+}
+
+async function ensureOtherSpeciesExists() {
+  const { data: existing } = await supabaseAdmin
+    .from('species_catalog')
+    .select('id')
+    .eq('scientific_name', 'Other')
+    .maybeSingle();
+  if (existing) return;
+  await supabaseAdmin
+    .from('species_catalog')
+    .upsert(
+      {
+        species_zh: '其它',
+        scientific_name: 'Other',
+        taxonomy_zh: '未识别分类',
+        is_rare: false,
+        image_url: '',
+        max_length_m: 0,
+        max_weight_kg: 0,
+        description_zh: '用于归档 AI 判定为非鱼但用户选择保留的记录。',
+        source: 'official',
+        status: 'approved',
+      },
+      { onConflict: 'scientific_name' },
+    );
 }
 
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
@@ -513,13 +703,8 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
   }
 
   if (!DOUBAO_API_KEY) {
-    console.warn('[identify] DOUBAO_API_KEY not set, returning stub');
-    return res.json({
-      scientific_name: 'Thunnus thynnus',
-      species_zh: '蓝鳍金枪鱼',
-      confidence: 0.98,
-      raw_label: 'stub_no_api_key',
-    });
+    console.error('[identify] DOUBAO_API_KEY not set');
+    return jsonError(res, 503, '识别服务未配置', 'DOUBAO_API_KEY is missing');
   }
 
   try {
@@ -613,21 +798,27 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
       }
     }
 
+    // Resolve via synonym/alias tables for robust matching
     if (isFish && speciesZh !== '未确定' && scientificName === 'Indeterminate') {
-      const { data: catalogRow } = await supabaseAdmin
-        .from('species_catalog')
-        .select('scientific_name')
-        .eq('species_zh', speciesZh)
-        .maybeSingle();
-      if (catalogRow) scientificName = catalogRow.scientific_name;
+      const entry = await resolveSpeciesByZh(speciesZh);
+      if (entry) {
+        scientificName = entry.scientific_name;
+        speciesZh = entry.species_zh;
+      }
     }
-    if (isFish && scientificName !== 'Indeterminate' && speciesZh === '未确定') {
-      const { data: catalogRow } = await supabaseAdmin
-        .from('species_catalog')
-        .select('species_zh')
-        .eq('scientific_name', scientificName)
-        .maybeSingle();
-      if (catalogRow) speciesZh = catalogRow.species_zh;
+    if (isFish && scientificName !== 'Indeterminate') {
+      const canonical = await resolveCanonicalScientificName(scientificName);
+      if (canonical !== scientificName) {
+        scientificName = canonical;
+      }
+      if (speciesZh === '未确定') {
+        const { data: catalogRow } = await supabaseAdmin
+          .from('species_catalog')
+          .select('species_zh')
+          .eq('scientific_name', scientificName)
+          .maybeSingle();
+        if (catalogRow) speciesZh = catalogRow.species_zh;
+      }
     }
 
     const confidence = isFish ? +(0.85 + Math.random() * 0.14).toFixed(2) : 0;
@@ -700,12 +891,122 @@ app.get('/v1/species/catalog', async (req, res) => {
     const { data, error } = await query;
     if (error) return jsonError(res, 500, '获取物种目录失败', String(error.message || error));
 
+    const speciesIds = (data || []).map((s) => s.id);
+
+    // Batch-fetch aliases and synonyms
+    let aliasRows = [];
+    let synonymRows = [];
+    if (speciesIds.length > 0) {
+      const [aliasRes, synonymRes] = await Promise.all([
+        supabaseAdmin
+          .from('species_aliases')
+          .select('id, alias_zh, species_id, region')
+          .in('species_id', speciesIds),
+        supabaseAdmin
+          .from('species_synonyms')
+          .select('id, synonym, canonical_scientific_name, source')
+          .in('canonical_scientific_name', (data || []).map((s) => s.scientific_name)),
+      ]);
+      aliasRows = aliasRes.data || [];
+      synonymRows = synonymRes.data || [];
+    }
+
+    // Attach aliases and synonyms to each species
+    const aliasesBySpeciesId = {};
+    for (const a of aliasRows) {
+      (aliasesBySpeciesId[a.species_id] = aliasesBySpeciesId[a.species_id] || []).push(a);
+    }
+    const synonymsByName = {};
+    for (const s of synonymRows) {
+      (synonymsByName[s.canonical_scientific_name] = synonymsByName[s.canonical_scientific_name] || []).push(s);
+    }
+
+    const enriched = (data || []).map((s) => ({
+      ...s,
+      aliases: aliasesBySpeciesId[s.id] || [],
+      synonyms: synonymsByName[s.scientific_name] || [],
+    }));
+
     return res.json({
-      species: data || [],
-      total: (data || []).length,
+      species: enriched,
+      total: enriched.length,
     });
   } catch (e) {
     return jsonError(res, 500, '获取物种目录失败', String(e?.message || e));
+  }
+});
+
+// Unified species search (matches species_zh, alias_zh, scientific_name, synonyms)
+app.get('/v1/species/search', async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json({ results: [] });
+
+  try {
+    const pattern = `%${q}%`;
+
+    // 1. Direct match on species_catalog (species_zh, scientific_name, name_en, alias_zh)
+    const { data: directHits, error: directErr } = await supabaseAdmin
+      .from('species_catalog')
+      .select('id, species_zh, scientific_name, taxonomy_zh, image_url, alias_zh, source, status')
+      .or(`species_zh.ilike.${pattern},scientific_name.ilike.${pattern},name_en.ilike.${pattern},alias_zh.ilike.${pattern}`)
+      .eq('status', 'approved')
+      .limit(30);
+
+    if (directErr) return jsonError(res, 500, '搜索失败', String(directErr.message));
+
+    const resultMap = new Map();
+    for (const row of (directHits || [])) {
+      resultMap.set(row.id, row);
+    }
+
+    // 2. Match on species_aliases
+    const { data: aliasHits } = await supabaseAdmin
+      .from('species_aliases')
+      .select('species_id, alias_zh')
+      .ilike('alias_zh', pattern)
+      .limit(30);
+
+    if (aliasHits && aliasHits.length > 0) {
+      const missingIds = aliasHits
+        .map((a) => a.species_id)
+        .filter((id) => !resultMap.has(id));
+      if (missingIds.length > 0) {
+        const { data: extraSpecies } = await supabaseAdmin
+          .from('species_catalog')
+          .select('id, species_zh, scientific_name, taxonomy_zh, image_url, alias_zh, source, status')
+          .in('id', missingIds)
+          .eq('status', 'approved');
+        for (const row of (extraSpecies || [])) {
+          resultMap.set(row.id, row);
+        }
+      }
+    }
+
+    // 3. Match on species_synonyms
+    const { data: synHits } = await supabaseAdmin
+      .from('species_synonyms')
+      .select('canonical_scientific_name, synonym')
+      .ilike('synonym', pattern)
+      .limit(30);
+
+    if (synHits && synHits.length > 0) {
+      const canonicals = [...new Set(synHits.map((s) => s.canonical_scientific_name))];
+      const { data: synSpecies } = await supabaseAdmin
+        .from('species_catalog')
+        .select('id, species_zh, scientific_name, taxonomy_zh, image_url, alias_zh, source, status')
+        .in('scientific_name', canonicals)
+        .eq('status', 'approved');
+      for (const row of (synSpecies || [])) {
+        resultMap.set(row.id, row);
+      }
+    }
+
+    return res.json({
+      results: [...resultMap.values()],
+      total: resultMap.size,
+    });
+  } catch (e) {
+    return jsonError(res, 500, '搜索失败', String(e?.message || e));
   }
 });
 
@@ -785,6 +1086,306 @@ app.post('/v1/species/catalog', upload.single('image'), async (req, res) => {
     return res.json({ species: inserted, created: true });
   } catch (e) {
     return jsonError(res, 500, '创建物种失败', String(e?.message || e));
+  }
+});
+
+// -----------------------
+// Admin Species Management (MVP)
+// -----------------------
+
+app.get('/v1/admin/species', async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  try {
+    const statusFilter = String(req.query.status || 'all');
+    let query = supabaseAdmin
+      .from('species_catalog')
+      .select('id, species_zh, scientific_name, taxonomy_zh, is_rare, image_url, max_length_m, max_weight_kg, description_zh, name_en, encyclopedia_category, rarity_display, alias_zh, source, status, contributed_by, contributed_image_url, created_at')
+      .order('id', { ascending: true });
+    if (statusFilter !== 'all') query = query.eq('status', statusFilter);
+    const { data, error } = await query;
+    if (error) return jsonError(res, 500, '读取物种列表失败', String(error.message || error));
+    return res.json({ species: data || [], total: (data || []).length });
+  } catch (e) {
+    return jsonError(res, 500, '读取物种列表失败', String(e?.message || e));
+  }
+});
+
+app.patch('/v1/admin/species/:id', async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return jsonError(res, 400, '无效物种ID');
+  const body = req.body || {};
+  const allowed = [
+    'species_zh',
+    'scientific_name',
+    'taxonomy_zh',
+    'is_rare',
+    'image_url',
+    'max_length_m',
+    'max_weight_kg',
+    'description_zh',
+    'name_en',
+    'encyclopedia_category',
+    'rarity_display',
+    'alias_zh',
+    'source',
+    'status',
+  ];
+  const patch = {};
+  for (const k of allowed) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) patch[k] = body[k];
+  }
+  if (Object.keys(patch).length === 0) return jsonError(res, 400, '没有可更新字段');
+
+  try {
+    const { data: before, error: beforeErr } = await supabaseAdmin
+      .from('species_catalog')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (beforeErr) return jsonError(res, 500, '读取物种失败', String(beforeErr.message || beforeErr));
+    if (!before) return jsonError(res, 404, '物种不存在');
+
+    const { data: updated, error: upErr } = await supabaseAdmin
+      .from('species_catalog')
+      .update(patch)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (upErr) return jsonError(res, 500, '更新物种失败', String(upErr.message || upErr));
+
+    await logSpeciesAdminAction({
+      actorUserId: user.id,
+      action: 'update_species',
+      speciesId: id,
+      speciesScientificName: updated.scientific_name,
+      beforeData: before,
+      afterData: updated,
+    });
+
+    return res.json({ species: updated });
+  } catch (e) {
+    return jsonError(res, 500, '更新物种失败', String(e?.message || e));
+  }
+});
+
+app.post('/v1/admin/species/:id/image', upload.single('image'), async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return jsonError(res, 400, '无效物种ID');
+  if (!req.file || !req.file.buffer) return jsonError(res, 400, '请上传图片');
+
+  try {
+    const { data: before, error: beforeErr } = await supabaseAdmin
+      .from('species_catalog')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (beforeErr) return jsonError(res, 500, '读取物种失败', String(beforeErr.message || beforeErr));
+    if (!before) return jsonError(res, 404, '物种不存在');
+
+    const imageUrl = await uploadSpeciesImage(req.file.buffer, before.scientific_name);
+    const { data: updated, error: upErr } = await supabaseAdmin
+      .from('species_catalog')
+      .update({ image_url: imageUrl })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (upErr) return jsonError(res, 500, '更新物种图片失败', String(upErr.message || upErr));
+
+    await logSpeciesAdminAction({
+      actorUserId: user.id,
+      action: 'replace_species_image',
+      speciesId: id,
+      speciesScientificName: updated.scientific_name,
+      beforeData: { image_url: before.image_url },
+      afterData: { image_url: updated.image_url },
+    });
+
+    return res.json({ species: updated });
+  } catch (e) {
+    return jsonError(res, 500, '更新物种图片失败', String(e?.message || e));
+  }
+});
+
+app.post('/v1/admin/species/:id/aliases', async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return jsonError(res, 400, '无效物种ID');
+  const aliasZh = String(req.body?.alias_zh || '').trim();
+  const region = String(req.body?.region || '').trim();
+  if (!aliasZh) return jsonError(res, 400, 'alias_zh 不能为空');
+
+  try {
+    const { data: species } = await supabaseAdmin
+      .from('species_catalog')
+      .select('id, scientific_name')
+      .eq('id', id)
+      .maybeSingle();
+    if (!species) return jsonError(res, 404, '物种不存在');
+
+    const { data: inserted, error } = await supabaseAdmin
+      .from('species_aliases')
+      .upsert({ species_id: id, alias_zh: aliasZh, region: region || null }, { onConflict: 'alias_zh,species_id' })
+      .select('*')
+      .single();
+    if (error) return jsonError(res, 500, '添加俗名失败', String(error.message || error));
+
+    await logSpeciesAdminAction({
+      actorUserId: user.id,
+      action: 'add_species_alias',
+      speciesId: id,
+      speciesScientificName: species.scientific_name,
+      afterData: inserted,
+    });
+
+    return res.json({ alias: inserted });
+  } catch (e) {
+    return jsonError(res, 500, '添加俗名失败', String(e?.message || e));
+  }
+});
+
+app.post('/v1/admin/species/snapshots', async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  try {
+    const note = String(req.body?.note || '').trim();
+    const snap = await createSpeciesSnapshot({ note, actorUserId: user.id });
+    await logSpeciesAdminAction({
+      actorUserId: user.id,
+      action: 'create_species_snapshot',
+      metadata: { snapshot_id: snap.id, note: snap.note || null },
+    });
+    return res.json({ snapshot: snap });
+  } catch (e) {
+    return jsonError(res, 500, '创建快照失败', String(e?.message || e));
+  }
+});
+
+app.get('/v1/admin/species/snapshots', async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('species_catalog_snapshots')
+      .select('id, note, created_by, created_at')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) return jsonError(res, 500, '读取快照列表失败', String(error.message || error));
+    return res.json({ snapshots: data || [] });
+  } catch (e) {
+    return jsonError(res, 500, '读取快照列表失败', String(e?.message || e));
+  }
+});
+
+app.post('/v1/admin/species/snapshots/:id/restore', async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  const snapshotId = String(req.params.id || '').trim();
+  if (!snapshotId) return jsonError(res, 400, '缺少快照ID');
+
+  try {
+    const [speciesRes, aliasRes, synRes] = await Promise.all([
+      supabaseAdmin
+        .from('species_catalog_snapshot_rows')
+        .select('scientific_name, row_data')
+        .eq('snapshot_id', snapshotId),
+      supabaseAdmin
+        .from('species_aliases_snapshot_rows')
+        .select('alias_data')
+        .eq('snapshot_id', snapshotId),
+      supabaseAdmin
+        .from('species_synonyms_snapshot_rows')
+        .select('synonym_data')
+        .eq('snapshot_id', snapshotId),
+    ]);
+
+    if (speciesRes.error) return jsonError(res, 500, '读取快照失败', String(speciesRes.error.message || speciesRes.error));
+    const speciesRows = speciesRes.data || [];
+    if (speciesRows.length === 0) return jsonError(res, 404, '快照不存在或为空');
+
+    // Non-destructive restore: upsert catalog rows by scientific_name.
+    const payload = speciesRows.map((r) => {
+      const d = r.row_data || {};
+      return {
+        species_zh: d.species_zh,
+        scientific_name: d.scientific_name || r.scientific_name,
+        taxonomy_zh: d.taxonomy_zh || '',
+        is_rare: d.is_rare === true,
+        image_url: d.image_url || 'https://via.placeholder.com/1200x800?text=species',
+        max_length_m: Number(d.max_length_m || 0),
+        max_weight_kg: Number(d.max_weight_kg || 0),
+        description_zh: d.description_zh || '',
+        name_en: d.name_en || null,
+        encyclopedia_category: d.encyclopedia_category || null,
+        rarity_display: d.rarity_display || null,
+        alias_zh: d.alias_zh || null,
+        source: d.source || 'official',
+        status: d.status || 'approved',
+        contributed_by: d.contributed_by || null,
+        contributed_image_url: d.contributed_image_url || null,
+      };
+    });
+
+    const { error: upErr } = await supabaseAdmin
+      .from('species_catalog')
+      .upsert(payload, { onConflict: 'scientific_name' });
+    if (upErr) return jsonError(res, 500, '回滚物种表失败', String(upErr.message || upErr));
+
+    // Replace aliases/synonyms with snapshot state
+    await supabaseAdmin.from('species_aliases').delete().neq('id', 0);
+    await supabaseAdmin.from('species_synonyms').delete().neq('id', 0);
+
+    const aliasRows = (aliasRes.data || []).map((r) => r.alias_data).filter(Boolean);
+    if (aliasRows.length > 0) {
+      const aliasPayload = aliasRows.map((a) => ({
+        alias_zh: a.alias_zh,
+        species_id: a.species_id,
+        region: a.region || null,
+      }));
+      await supabaseAdmin.from('species_aliases').insert(aliasPayload);
+    }
+
+    const synRows = (synRes.data || []).map((r) => r.synonym_data).filter(Boolean);
+    if (synRows.length > 0) {
+      const synPayload = synRows.map((s) => ({
+        synonym: s.synonym,
+        canonical_scientific_name: s.canonical_scientific_name,
+        source: s.source || 'manual',
+      }));
+      await supabaseAdmin.from('species_synonyms').insert(synPayload);
+    }
+
+    await logSpeciesAdminAction({
+      actorUserId: user.id,
+      action: 'restore_species_snapshot',
+      metadata: { snapshot_id: snapshotId, restored_rows: payload.length },
+    });
+
+    return res.json({ ok: true, snapshot_id: snapshotId, restored_rows: payload.length });
+  } catch (e) {
+    return jsonError(res, 500, '回滚快照失败', String(e?.message || e));
+  }
+});
+
+app.get('/v1/admin/species/audit-logs', async (req, res) => {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+  try {
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+    const { data, error } = await supabaseAdmin
+      .from('species_admin_audit_logs')
+      .select('id, actor_user_id, action, species_id, species_scientific_name, before_data, after_data, metadata, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) return jsonError(res, 500, '读取审计日志失败', String(error.message || error));
+    return res.json({ logs: data || [] });
+  } catch (e) {
+    return jsonError(res, 500, '读取审计日志失败', String(e?.message || e));
   }
 });
 
@@ -997,6 +1598,18 @@ app.post('/v1/catches', upload.single(IMAGE_FIELD), async (req, res) => {
   if (!payload.scientific_name) return jsonError(res, 400, '鱼种不能为空');
   if (!file && !imageBase64) return jsonError(res, 400, '请先上传照片再发布');
 
+  if (payload.scientific_name === 'Other') {
+    await ensureOtherSpeciesExists();
+  }
+
+  // Resolve synonym before FK check
+  if (isIdentifiedScientificName(payload.scientific_name)) {
+    const canonical = await resolveCanonicalScientificName(payload.scientific_name);
+    if (canonical !== payload.scientific_name) {
+      payload.scientific_name = canonical;
+    }
+  }
+
   // Auto-upsert species if not in catalog (prevents FK violation for AI-discovered species)
   if (isIdentifiedScientificName(payload.scientific_name)) {
     const { data: catRow } = await supabaseAdmin
@@ -1120,6 +1733,10 @@ app.put('/v1/catches/:id', upload.single(IMAGE_FIELD), async (req, res) => {
   };
 
   if (!payload.scientific_name) return jsonError(res, 400, '鱼种不能为空');
+
+  if (payload.scientific_name === 'Other') {
+    await ensureOtherSpeciesExists();
+  }
 
   // If the row was rejected before, switching to pending_review matches the front-end's edit logic.
   const existing = await supabaseAdmin

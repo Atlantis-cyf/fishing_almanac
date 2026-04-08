@@ -11,7 +11,7 @@ import 'package:fishing_almanac/theme/catch_ui_constants.dart';
 import 'package:fishing_almanac/widgets/app_network_image.dart';
 import 'package:fishing_almanac/widgets/bottom_nav.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class SpeciesDetailScreen extends StatefulWidget {
   const SpeciesDetailScreen({super.key, required this.speciesScientificName});
@@ -23,6 +23,21 @@ class SpeciesDetailScreen extends StatefulWidget {
 }
 
 class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
+  Widget _otherPlaceholderHero() {
+    return Container(
+      color: AppColors.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: const Text(
+        '?',
+        style: TextStyle(
+          fontSize: 96,
+          fontWeight: FontWeight.w800,
+          color: AppColors.outline,
+        ),
+      ),
+    );
+  }
+
   Future<List<List<CatchFeedItem>>>? _detailFuture;
   int _lastGen = -1;
   String? _lastScientific;
@@ -61,6 +76,8 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
     }
 
     final entry = SpeciesCatalog.byScientificName(widget.speciesScientificName);
+    final isOtherArchive =
+        entry.scientificName == SpeciesCatalog.otherScientificName;
     final titleZh = entry.speciesZh;
     final heroUrl = entry.imageUrl;
     final sci = entry.scientificName;
@@ -96,7 +113,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                     ),
                     title: Text(
                       'Species Detail',
-                      style: GoogleFonts.manrope(
+                      style: AppFont.manrope(
                         fontWeight: FontWeight.w700,
                         fontSize: 18,
                         color: const Color(0xFFecfeff),
@@ -113,7 +130,10 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              AppNetworkImage(url: heroUrl, fit: BoxFit.cover),
+                              if (entry.scientificName == SpeciesCatalog.otherScientificName)
+                                _otherPlaceholderHero()
+                              else
+                                AppNetworkImage(url: heroUrl, fit: BoxFit.cover),
                               Container(
                                 decoration: const BoxDecoration(
                                   gradient: LinearGradient(
@@ -132,7 +152,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                                   children: [
                                     Text(
                                       titleZh,
-                                      style: GoogleFonts.manrope(
+                                      style: AppFont.manrope(
                                         fontSize: 34,
                                         fontWeight: FontWeight.w800,
                                         color: const Color(0xFFc3f5ff),
@@ -164,25 +184,61 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                                       ),
                                     ],
                                     const SizedBox(height: 20),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: _GlassStat(
-                                            label: '最大重量',
-                                            value: maxKgStr,
-                                            unit: 'kg',
+                                    if (isOtherArchive)
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF222a3d).withValues(alpha: 0.65),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: AppColors.primaryContainer.withValues(alpha: 0.15),
                                           ),
                                         ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: _GlassStat(
-                                            label: '最大长度',
-                                            value: maxMStr,
-                                            unit: 'm',
-                                          ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '未识别归档目录',
+                                              style: AppFont.manrope(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primaryContainer,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              '此处汇总 AI 判定为非鱼类、或无法归入具体物种、但您仍选择保留的鱼获照片；'
+                                              '不包含标准物种的最大体长/体重数据。',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                height: 1.45,
+                                                color: AppColors.onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
+                                      )
+                                    else
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: _GlassStat(
+                                              label: '最大重量',
+                                              value: maxKgStr,
+                                              unit: 'kg',
+                                            ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: _GlassStat(
+                                              label: '最大长度',
+                                              value: maxMStr,
+                                              unit: 'm',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                   ],
                                 ),
                               ),
@@ -257,7 +313,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                           const SizedBox(width: 8),
                           Text(
                             '物种描述',
-                            style: GoogleFonts.manrope(
+                            style: AppFont.manrope(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
                               color: AppColors.onSurface,
@@ -289,7 +345,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                           const SizedBox(width: 8),
                           Text(
                             '我的鱼获',
-                            style: GoogleFonts.manrope(
+                            style: AppFont.manrope(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
                               color: AppColors.onSurface,
@@ -406,7 +462,7 @@ class _GlassStat extends StatelessWidget {
           Text.rich(
             TextSpan(
               text: value,
-              style: GoogleFonts.manrope(
+              style: AppFont.manrope(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: AppColors.primaryContainer,

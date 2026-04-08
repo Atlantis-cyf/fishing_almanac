@@ -166,6 +166,11 @@ abstract final class SpeciesCatalogEndpoints {
     'SPECIES_CATALOG_CREATE_PATH',
     defaultValue: '/v1/species/catalog',
   );
+
+  static const String search = String.fromEnvironment(
+    'SPECIES_CATALOG_SEARCH_PATH',
+    defaultValue: '/v1/species/search',
+  );
 }
 
 /// 图鉴相关 API。

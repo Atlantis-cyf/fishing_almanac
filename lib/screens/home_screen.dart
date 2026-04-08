@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -8,13 +10,14 @@ import 'package:fishing_almanac/models/catch_feed_item.dart';
 import 'package:fishing_almanac/models/catch_review_status.dart';
 import 'package:fishing_almanac/models/feed_detail_extra.dart';
 import 'package:fishing_almanac/repositories/catch_repository.dart';
+import 'package:fishing_almanac/services/species_catalog_service.dart';
 import 'package:fishing_almanac/state/user_profile.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/catch_ui_constants.dart';
 import 'package:fishing_almanac/widgets/app_network_image.dart';
 import 'package:fishing_almanac/widgets/bottom_nav.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,11 +29,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Future<List<CatchFeedItem>>? _timelineFuture;
   int _lastGen = -1;
+  bool _catalogFetchRequested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_catalogFetchRequested) {
+      _catalogFetchRequested = true;
+      unawaited(context.read<SpeciesCatalogService>().fetchIfNeeded());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<CatchRepository>();
     final profile = context.watch<UserProfile>();
+    context.watch<SpeciesCatalogService>();
     if (repo.dataGeneration != _lastGen) {
       _lastGen = repo.dataGeneration;
       _timelineFuture = repo.timelineHome().then((p) => p.items);
@@ -54,11 +68,14 @@ class _HomeScreenState extends State<HomeScreen> {
           if (s.isEmpty) continue;
           final k = SpeciesCatalog.normalizeScientificNameKey(s);
           if (k == SpeciesCatalog.normalizeScientificNameKey('Indeterminate') ||
-              k == SpeciesCatalog.normalizeScientificNameKey('Unnamed species')) {
+              k == SpeciesCatalog.normalizeScientificNameKey('Unnamed species') ||
+              k == SpeciesCatalog.normalizeScientificNameKey(SpeciesCatalog.otherScientificName)) {
             continue;
           }
           unlockedSpecies.add(s);
         }
+        final rareSpeciesCount =
+            context.read<SpeciesCatalogService>().countUnlockedRareSpecies(unlockedSpecies);
         return Scaffold(
       extendBody: true,
       body: Stack(
@@ -76,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 title: Text(
                   '海钓图鉴',
-                  style: GoogleFonts.manrope(
+                  style: AppFont.manrope(
                     fontWeight: FontWeight.w700,
                     fontSize: 20,
                     color: AppColors.cyanNav,
@@ -133,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   children: [
                                     Text(
                                       profile.displayName,
-                                      style: GoogleFonts.manrope(
+                                      style: AppFont.manrope(
                                         fontSize: 28,
                                         fontWeight: FontWeight.w800,
                                         color: Colors.white,
@@ -195,7 +212,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             Container(width: 1, height: 48, color: AppColors.outlineVariant.withValues(alpha: 0.3)),
                             Expanded(child: _Stat(label: '解锁品种', value: '${unlockedSpecies.length}', valueColor: AppColors.cyanNav)),
                             Container(width: 1, height: 48, color: AppColors.outlineVariant.withValues(alpha: 0.3)),
-                            Expanded(child: _Stat(label: '稀有记录', value: '（正在开发中）', valueColor: AppColors.secondary)),
+                            Expanded(
+                              child: _Stat(
+                                label: '稀有记录',
+                                value: '$rareSpeciesCount',
+                                valueColor: AppColors.secondary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -211,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Text(
                         '我的鱼获',
-                        style: GoogleFonts.manrope(
+                        style: AppFont.manrope(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
@@ -326,7 +349,7 @@ class _Stat extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           value,
-          style: GoogleFonts.manrope(
+          style: AppFont.manrope(
             fontSize: value.length > 3 ? 18 : 36,
             fontWeight: FontWeight.w800,
             color: valueColor,

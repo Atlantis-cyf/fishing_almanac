@@ -10,7 +10,7 @@ import 'package:fishing_almanac/router/feed_detail_route_args.dart';
 import 'package:fishing_almanac/state/user_profile.dart';
 import 'package:fishing_almanac/data/image_urls.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -122,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         '海钓图鉴',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.manrope(
+                        style: AppFont.manrope(
                           fontSize: 40,
                           fontWeight: FontWeight.w800,
                           color: AppColors.primary,
@@ -158,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('登录', style: GoogleFonts.manrope(fontSize: 24, fontWeight: FontWeight.w700)),
+                              Text('登录', style: AppFont.manrope(fontSize: 24, fontWeight: FontWeight.w700)),
                               const SizedBox(height: 4),
                               Text(
                                 '验证您的身份以进入系统',
@@ -270,7 +270,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           children: [
                                             Text(
                                               '登录',
-                                              style: GoogleFonts.manrope(
+                                              style: AppFont.manrope(
                                                 fontWeight: FontWeight.w800,
                                                 letterSpacing: 3,
                                                 fontSize: 13,

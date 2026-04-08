@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:fishing_almanac/theme/app_font.dart';
 
 /// 底部导航：首页 / 中央记录 / 图鉴（与设计稿一致）。
 class AppBottomNav extends StatelessWidget {
@@ -104,7 +104,7 @@ class AppBottomNav extends StatelessWidget {
                             const SizedBox(height: 6),
                             Text(
                               '记录',
-                              style: GoogleFonts.manrope(
+                              style: AppFont.manrope(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 12,
                                 letterSpacing: 1.2,
@@ -154,7 +154,7 @@ class _SideItem extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
-              style: GoogleFonts.manrope(
+              style: AppFont.manrope(
                 fontWeight: FontWeight.w700,
                 fontSize: 11,
                 color: color,
