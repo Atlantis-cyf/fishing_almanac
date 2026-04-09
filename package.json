@@ -1,7 +1,7 @@
 {
   "name": "fishing_almanac",
   "private": true,
-  "description": "Flutter web + Express BFF. Vercel: Root Directory empty → vercel.json (see scripts/vercel-*.sh). Backend-only project: Root Directory backend → backend/vercel.json.",
+  "description": "Flutter web + Express BFF. Vercel repo-root: Root ./ → vercel.json + scripts/vercel-*.sh; second project same root, set FLUTTER_WEB_TARGET=admin for admin web. Backend-only: Root backend → backend/vercel.json.",
   "engines": {
     "node": ">=18"
   },
