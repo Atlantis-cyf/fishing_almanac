@@ -173,6 +173,41 @@ abstract final class SpeciesCatalogEndpoints {
   );
 }
 
+/// 物种后台管理 API（仅管理员）。
+abstract final class AdminSpeciesEndpoints {
+  static const String list = String.fromEnvironment(
+    'ADMIN_SPECIES_LIST_PATH',
+    defaultValue: '/v1/admin/species',
+  );
+
+  static const String mergePreview = String.fromEnvironment(
+    'ADMIN_SPECIES_MERGE_PREVIEW_PATH',
+    defaultValue: '/v1/admin/species/merge/preview',
+  );
+
+  static const String merge = String.fromEnvironment(
+    'ADMIN_SPECIES_MERGE_PATH',
+    defaultValue: '/v1/admin/species/merge',
+  );
+
+  static const String snapshots = String.fromEnvironment(
+    'ADMIN_SPECIES_SNAPSHOTS_PATH',
+    defaultValue: '/v1/admin/species/snapshots',
+  );
+
+  static const String auditLogs = String.fromEnvironment(
+    'ADMIN_SPECIES_AUDIT_LOGS_PATH',
+    defaultValue: '/v1/admin/species/audit-logs',
+  );
+
+  static String detail(int id) => '$list/$id';
+  static String image(int id) => '$list/$id/image';
+  static String aliases(int id) => '$list/$id/aliases';
+  static String replaceAliases(int id) => '$list/$id/aliases/replace';
+  static String aliasById(int id, int aliasId) => '$list/$id/aliases/$aliasId';
+  static String restoreSnapshot(String snapshotId) => '$snapshots/$snapshotId/restore';
+}
+
 /// 图鉴相关 API。
 abstract final class EncyclopediaEndpoints {
   /// 当前进度：已解锁鱼种数量 / 全图鉴物种库数量（目前后端 mock 650）。

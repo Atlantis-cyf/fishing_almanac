@@ -5,6 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 
 const { createClient } = require('@supabase/supabase-js');
+const { registerAdminRoutes } = require('./admin/registerAdminRoutes');
 
 const app = express();
 
@@ -152,6 +153,10 @@ const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+const ADMIN_ALLOWED_ORIGINS = (process.env.ADMIN_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
 
 function isAdminUser(user) {
   if (!user) return false;
@@ -170,6 +175,13 @@ async function requireAdmin(req, res) {
     return null;
   }
   return user;
+}
+
+function isAdminOriginAllowed(req) {
+  if (ADMIN_ALLOWED_ORIGINS.length === 0) return true;
+  const origin = String(req.headers.origin || '').trim().toLowerCase();
+  if (!origin) return true; // allow non-browser clients (curl/server jobs)
+  return ADMIN_ALLOWED_ORIGINS.includes(origin);
 }
 
 async function logSpeciesAdminAction({
@@ -249,6 +261,10 @@ function parseNumber(v, fallback = 0) {
   if (!s) return fallback;
   const n = Number(s);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function normKey(v) {
+  return String(v || '').trim().toLowerCase();
 }
 
 function toIsoZ(d) {
@@ -1092,301 +1108,18 @@ app.post('/v1/species/catalog', upload.single('image'), async (req, res) => {
 // -----------------------
 // Admin Species Management (MVP)
 // -----------------------
-
-app.get('/v1/admin/species', async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  try {
-    const statusFilter = String(req.query.status || 'all');
-    let query = supabaseAdmin
-      .from('species_catalog')
-      .select('id, species_zh, scientific_name, taxonomy_zh, is_rare, image_url, max_length_m, max_weight_kg, description_zh, name_en, encyclopedia_category, rarity_display, alias_zh, source, status, contributed_by, contributed_image_url, created_at')
-      .order('id', { ascending: true });
-    if (statusFilter !== 'all') query = query.eq('status', statusFilter);
-    const { data, error } = await query;
-    if (error) return jsonError(res, 500, '读取物种列表失败', String(error.message || error));
-    return res.json({ species: data || [], total: (data || []).length });
-  } catch (e) {
-    return jsonError(res, 500, '读取物种列表失败', String(e?.message || e));
-  }
-});
-
-app.patch('/v1/admin/species/:id', async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return jsonError(res, 400, '无效物种ID');
-  const body = req.body || {};
-  const allowed = [
-    'species_zh',
-    'scientific_name',
-    'taxonomy_zh',
-    'is_rare',
-    'image_url',
-    'max_length_m',
-    'max_weight_kg',
-    'description_zh',
-    'name_en',
-    'encyclopedia_category',
-    'rarity_display',
-    'alias_zh',
-    'source',
-    'status',
-  ];
-  const patch = {};
-  for (const k of allowed) {
-    if (Object.prototype.hasOwnProperty.call(body, k)) patch[k] = body[k];
-  }
-  if (Object.keys(patch).length === 0) return jsonError(res, 400, '没有可更新字段');
-
-  try {
-    const { data: before, error: beforeErr } = await supabaseAdmin
-      .from('species_catalog')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-    if (beforeErr) return jsonError(res, 500, '读取物种失败', String(beforeErr.message || beforeErr));
-    if (!before) return jsonError(res, 404, '物种不存在');
-
-    const { data: updated, error: upErr } = await supabaseAdmin
-      .from('species_catalog')
-      .update(patch)
-      .eq('id', id)
-      .select('*')
-      .single();
-    if (upErr) return jsonError(res, 500, '更新物种失败', String(upErr.message || upErr));
-
-    await logSpeciesAdminAction({
-      actorUserId: user.id,
-      action: 'update_species',
-      speciesId: id,
-      speciesScientificName: updated.scientific_name,
-      beforeData: before,
-      afterData: updated,
-    });
-
-    return res.json({ species: updated });
-  } catch (e) {
-    return jsonError(res, 500, '更新物种失败', String(e?.message || e));
-  }
-});
-
-app.post('/v1/admin/species/:id/image', upload.single('image'), async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return jsonError(res, 400, '无效物种ID');
-  if (!req.file || !req.file.buffer) return jsonError(res, 400, '请上传图片');
-
-  try {
-    const { data: before, error: beforeErr } = await supabaseAdmin
-      .from('species_catalog')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-    if (beforeErr) return jsonError(res, 500, '读取物种失败', String(beforeErr.message || beforeErr));
-    if (!before) return jsonError(res, 404, '物种不存在');
-
-    const imageUrl = await uploadSpeciesImage(req.file.buffer, before.scientific_name);
-    const { data: updated, error: upErr } = await supabaseAdmin
-      .from('species_catalog')
-      .update({ image_url: imageUrl })
-      .eq('id', id)
-      .select('*')
-      .single();
-    if (upErr) return jsonError(res, 500, '更新物种图片失败', String(upErr.message || upErr));
-
-    await logSpeciesAdminAction({
-      actorUserId: user.id,
-      action: 'replace_species_image',
-      speciesId: id,
-      speciesScientificName: updated.scientific_name,
-      beforeData: { image_url: before.image_url },
-      afterData: { image_url: updated.image_url },
-    });
-
-    return res.json({ species: updated });
-  } catch (e) {
-    return jsonError(res, 500, '更新物种图片失败', String(e?.message || e));
-  }
-});
-
-app.post('/v1/admin/species/:id/aliases', async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return jsonError(res, 400, '无效物种ID');
-  const aliasZh = String(req.body?.alias_zh || '').trim();
-  const region = String(req.body?.region || '').trim();
-  if (!aliasZh) return jsonError(res, 400, 'alias_zh 不能为空');
-
-  try {
-    const { data: species } = await supabaseAdmin
-      .from('species_catalog')
-      .select('id, scientific_name')
-      .eq('id', id)
-      .maybeSingle();
-    if (!species) return jsonError(res, 404, '物种不存在');
-
-    const { data: inserted, error } = await supabaseAdmin
-      .from('species_aliases')
-      .upsert({ species_id: id, alias_zh: aliasZh, region: region || null }, { onConflict: 'alias_zh,species_id' })
-      .select('*')
-      .single();
-    if (error) return jsonError(res, 500, '添加俗名失败', String(error.message || error));
-
-    await logSpeciesAdminAction({
-      actorUserId: user.id,
-      action: 'add_species_alias',
-      speciesId: id,
-      speciesScientificName: species.scientific_name,
-      afterData: inserted,
-    });
-
-    return res.json({ alias: inserted });
-  } catch (e) {
-    return jsonError(res, 500, '添加俗名失败', String(e?.message || e));
-  }
-});
-
-app.post('/v1/admin/species/snapshots', async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  try {
-    const note = String(req.body?.note || '').trim();
-    const snap = await createSpeciesSnapshot({ note, actorUserId: user.id });
-    await logSpeciesAdminAction({
-      actorUserId: user.id,
-      action: 'create_species_snapshot',
-      metadata: { snapshot_id: snap.id, note: snap.note || null },
-    });
-    return res.json({ snapshot: snap });
-  } catch (e) {
-    return jsonError(res, 500, '创建快照失败', String(e?.message || e));
-  }
-});
-
-app.get('/v1/admin/species/snapshots', async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('species_catalog_snapshots')
-      .select('id, note, created_by, created_at')
-      .order('created_at', { ascending: false })
-      .limit(100);
-    if (error) return jsonError(res, 500, '读取快照列表失败', String(error.message || error));
-    return res.json({ snapshots: data || [] });
-  } catch (e) {
-    return jsonError(res, 500, '读取快照列表失败', String(e?.message || e));
-  }
-});
-
-app.post('/v1/admin/species/snapshots/:id/restore', async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  const snapshotId = String(req.params.id || '').trim();
-  if (!snapshotId) return jsonError(res, 400, '缺少快照ID');
-
-  try {
-    const [speciesRes, aliasRes, synRes] = await Promise.all([
-      supabaseAdmin
-        .from('species_catalog_snapshot_rows')
-        .select('scientific_name, row_data')
-        .eq('snapshot_id', snapshotId),
-      supabaseAdmin
-        .from('species_aliases_snapshot_rows')
-        .select('alias_data')
-        .eq('snapshot_id', snapshotId),
-      supabaseAdmin
-        .from('species_synonyms_snapshot_rows')
-        .select('synonym_data')
-        .eq('snapshot_id', snapshotId),
-    ]);
-
-    if (speciesRes.error) return jsonError(res, 500, '读取快照失败', String(speciesRes.error.message || speciesRes.error));
-    const speciesRows = speciesRes.data || [];
-    if (speciesRows.length === 0) return jsonError(res, 404, '快照不存在或为空');
-
-    // Non-destructive restore: upsert catalog rows by scientific_name.
-    const payload = speciesRows.map((r) => {
-      const d = r.row_data || {};
-      return {
-        species_zh: d.species_zh,
-        scientific_name: d.scientific_name || r.scientific_name,
-        taxonomy_zh: d.taxonomy_zh || '',
-        is_rare: d.is_rare === true,
-        image_url: d.image_url || 'https://via.placeholder.com/1200x800?text=species',
-        max_length_m: Number(d.max_length_m || 0),
-        max_weight_kg: Number(d.max_weight_kg || 0),
-        description_zh: d.description_zh || '',
-        name_en: d.name_en || null,
-        encyclopedia_category: d.encyclopedia_category || null,
-        rarity_display: d.rarity_display || null,
-        alias_zh: d.alias_zh || null,
-        source: d.source || 'official',
-        status: d.status || 'approved',
-        contributed_by: d.contributed_by || null,
-        contributed_image_url: d.contributed_image_url || null,
-      };
-    });
-
-    const { error: upErr } = await supabaseAdmin
-      .from('species_catalog')
-      .upsert(payload, { onConflict: 'scientific_name' });
-    if (upErr) return jsonError(res, 500, '回滚物种表失败', String(upErr.message || upErr));
-
-    // Replace aliases/synonyms with snapshot state
-    await supabaseAdmin.from('species_aliases').delete().neq('id', 0);
-    await supabaseAdmin.from('species_synonyms').delete().neq('id', 0);
-
-    const aliasRows = (aliasRes.data || []).map((r) => r.alias_data).filter(Boolean);
-    if (aliasRows.length > 0) {
-      const aliasPayload = aliasRows.map((a) => ({
-        alias_zh: a.alias_zh,
-        species_id: a.species_id,
-        region: a.region || null,
-      }));
-      await supabaseAdmin.from('species_aliases').insert(aliasPayload);
-    }
-
-    const synRows = (synRes.data || []).map((r) => r.synonym_data).filter(Boolean);
-    if (synRows.length > 0) {
-      const synPayload = synRows.map((s) => ({
-        synonym: s.synonym,
-        canonical_scientific_name: s.canonical_scientific_name,
-        source: s.source || 'manual',
-      }));
-      await supabaseAdmin.from('species_synonyms').insert(synPayload);
-    }
-
-    await logSpeciesAdminAction({
-      actorUserId: user.id,
-      action: 'restore_species_snapshot',
-      metadata: { snapshot_id: snapshotId, restored_rows: payload.length },
-    });
-
-    return res.json({ ok: true, snapshot_id: snapshotId, restored_rows: payload.length });
-  } catch (e) {
-    return jsonError(res, 500, '回滚快照失败', String(e?.message || e));
-  }
-});
-
-app.get('/v1/admin/species/audit-logs', async (req, res) => {
-  const user = await requireAdmin(req, res);
-  if (!user) return;
-  try {
-    const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
-    const { data, error } = await supabaseAdmin
-      .from('species_admin_audit_logs')
-      .select('id, actor_user_id, action, species_id, species_scientific_name, before_data, after_data, metadata, created_at')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) return jsonError(res, 500, '读取审计日志失败', String(error.message || error));
-    return res.json({ logs: data || [] });
-  } catch (e) {
-    return jsonError(res, 500, '读取审计日志失败', String(e?.message || e));
-  }
+registerAdminRoutes({
+  app,
+  supabaseAdmin,
+  upload,
+  jsonError,
+  requireAdmin,
+  isAdminOriginAllowed,
+  logSpeciesAdminAction,
+  createSpeciesSnapshot,
+  toFiniteNumberOr,
+  normKey,
+  uploadSpeciesImage,
 });
 
 // -----------------------

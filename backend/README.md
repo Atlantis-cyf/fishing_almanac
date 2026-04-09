@@ -14,6 +14,11 @@
 数据使用 Supabase Postgres（`fishing_almanac/supabase/migrations/0001_init.sql` 创建的表）。
 为降低配置复杂度，当前把图片用 `image_base64` 存入数据库（不依赖 Storage bucket）。
 
+## Admin 后台文档入口
+
+- Admin 后端模块拆分与维护指南：`backend/admin/README.md`
+- 新增或调整 `/v1/admin/*` 接口时，优先按该文档的“放置规则”和“决策表”执行。
+
 ## 运行（本地开发）
 1. 配好 `backend/.env`（见 `backend/.env.example`）
 2. 在 `backend/` 执行：

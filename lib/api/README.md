@@ -33,6 +33,19 @@
 
 响应解析见 `UserMeDto`：支持根级、`data` 包裹或 `user` 嵌套下的 `display_name` / `displayName` / `nickname` / `username` 等。本地 `SharedPreferences` 键 `user_display_name_v1` 为缓存；**已登录时以服务端成功响应为准**，`GET` 失败则保留缓存。登出时 [UserProfile.onSessionEnded] 清除展示名缓存。
 
+### 物种后台管理（`AdminSpeciesEndpoints`）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/v1/admin/species/merge/preview` | 预览合并影响，规则固定 **B 合并到 A**（请求体含 `target_species_id`=A，`source_species_id`=B） |
+| `POST` | `/v1/admin/species/merge` | 执行合并（B→A），可选自动创建快照 `create_snapshot`，并将 B 标记为 merged/rejected |
+
+合并执行后：
+- `catches.scientific_name` 从 B 学名改为 A 学名；
+- B 的 `species_aliases` / `species_synonyms` 迁移并去重到 A；
+- 可选将 B 学名写为 A 的 synonym；
+- B 标记 `merged_into_species_id = A.id`、`merged_at`，并设 `status='rejected'` 以避免在前台继续展示。
+
 ### 列表 GET（`CatchListEndpoints`）
 
 | `dart-define` | 含义 | 默认 |
