@@ -10,11 +10,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Supabase-backed埋点客户端：用于留存率、上传漏斗、图鉴使用、AI成功率等分析。
 ///
-/// 默认关闭（`--dart-define=ENABLE_ANALYTICS=true` 才会真正上报），避免 flutter test / 未配置环境时打扰。
+/// 默认开启（可用 `--dart-define=ENABLE_ANALYTICS=false` 显式关闭），避免多环境配置不一致。
 class AnalyticsClient {
   AnalyticsClient({required ApiClient api})  //
       : _api = api,
-        _enabled = const bool.fromEnvironment('ENABLE_ANALYTICS', defaultValue: false);
+        _enabled = const bool.fromEnvironment('ENABLE_ANALYTICS', defaultValue: true);
 
   final ApiClient _api;
   final bool _enabled;

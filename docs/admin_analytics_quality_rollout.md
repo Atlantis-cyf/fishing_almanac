@@ -10,7 +10,7 @@
 
 | 风险项 | 表现 / 根因 | 对看板的影响 | 缓解与记录方式 |
 |--------|-------------|--------------|----------------|
-| **埋点开关关闭** | 客户端 `ENABLE_ANALYTICS=false`（默认）或未带 `--dart-define=ENABLE_ANALYTICS=true` 构建 | 表 `analytics_events` 无增量或极少；summary/daily 接近空 | 上线清单中明确「生产包是否打开埋点」；空态视为预期而非接口故障 |
+| **埋点开关关闭** | 客户端显式设置 `ENABLE_ANALYTICS=false`（当前代码默认开启）或构建参数与环境预期不一致 | 表 `analytics_events` 无增量或极少；summary/daily 接近空 | 上线清单中明确「生产包是否打开埋点」；空态视为预期而非接口故障 |
 | **properties 弱模式** | `jsonb` 缺字段、类型错误、枚举拼写不一致 | 扁平视图将字段视为 `null` 或无法 cast，计数偏少、UV 偏低 | 已在视图层做安全提取；定期跑「必填字段缺失率」SQL（按 `event_type`） |
 | **时间与重试** | `occurred_at` 为服务端入库时间；客户端重试导致重复事件 | 事件数偏高；AI 侧依赖 `request_id` 去重 | 整窗 KPI 用 `summary.dedup_request_count`（AI）；禁止对 `daily.dedup` 相加解释成整窗 |
 | **跨端同一用户** | 仅 `coalesce(user_id::text, anon_id)`，未做跨设备 ID 打通 | UV 可能被高估（多设备多 anon） | 合同已冻结口径；进阶需账号体系与 device 关联（非 MVP） |
@@ -23,7 +23,7 @@
 
 | 类别 | 开关 / 配置项 | 作用 | 若不满足 |
 |------|----------------|------|----------|
-| **客户端埋点** | Flutter `--dart-define=ENABLE_ANALYTICS=true` | 是否向 `/v1/analytics/events` 写事件 | 看板无数据或仅历史数据 |
+| **客户端埋点** | Flutter（当前默认开启；可用 `--dart-define=ENABLE_ANALYTICS=false` 显式关闭） | 是否向 `/v1/analytics/events` 写事件 | 看板无数据或仅历史数据 |
 | **服务端写库** | BFF 已部署且可连 Supabase；`analytics_events` 存在 | 事件可持久化 | 上报失败或写库错误 |
 | **管理端读库** | `SUPABASE_SERVICE_ROLE_KEY` + `SUPABASE_URL`（及库密码或 `DATABASE_URL` 用于迁移） | BFF 用 service role 读视图与 RPC | Admin 接口 5xx |
 | **管理员身份** | `ADMIN_EMAILS` / `ADMIN_USER_IDS` | `requireAdmin` 通过 | 403 |
@@ -46,7 +46,7 @@
 | 阶段 | 范围 | 目标 |
 |------|------|------|
 | **P0** | DB：`0002`～`0016` 已应用；BFF：Admin Analytics 路由可用 | 接口与视图/RPC 连通，管理员可拉取 JSON |
-| **P1** | 生产 App 打开 `ENABLE_ANALYTICS=true` 的小流量或全量 | 有持续事件写入，看板非空 |
+| **P1** | 生产 App 保持默认开启或未显式关闭埋点（可小流量灰度） | 有持续事件写入，看板非空 |
 | **P2** | Flutter Admin 看板给运营使用 | 四 Tab 可用，合同版本校验生效 |
 | **P3（可选）** | 对账与性能 | 核心指标 SQL/API/UI 抽样一致；慢查询可接受 |
 
@@ -63,7 +63,7 @@
 
 **P1 — 埋点与数据**
 
-- [ ] 生产（或预发）构建已带 `ENABLE_ANALYTICS=true`。  
+- [ ] 生产（或预发）构建未显式设置 `ENABLE_ANALYTICS=false`。  
 - [ ] 抽样用户在 24h 内产生 `app_launch` 或核心业务事件，`analytics_events` 行数增长。  
 - [ ] Overview `summary` 中 `active_users_uv` 与「仅打开埋点」预期一致（>0 或符合测试账号行为）。  
 - [ ] AI Tab：`summary.dedup_request_count` 与「有 request_id 的 AI 事件」语义一致（不强行等于 start 行数）。
@@ -85,7 +85,7 @@
 | 场景 | 动作 |
 |------|------|
 | 看板接口异常影响主站 | Admin 路由独立，一般无需关主站；可临时在网关禁用 `/v1/admin/analytics/*` |
-| 埋点造成压力或隐私争议 | 发版关闭 `ENABLE_ANALYTICS` 或后端对 `/v1/analytics/events` 限流（若已实现） |
+| 埋点造成压力或隐私争议 | 发版设置 `ENABLE_ANALYTICS=false` 或后端对 `/v1/analytics/events` 限流（若已实现） |
 | 错误数据污染 | 保留 `analytics_events` 审计策略；严重时可停写 + 后续清理分区/表（需 DBA 方案） |
 
 ### 2.4 第二部分验收（组织层面）
