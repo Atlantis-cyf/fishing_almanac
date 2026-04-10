@@ -208,6 +208,34 @@ abstract final class AdminSpeciesEndpoints {
   static String restoreSnapshot(String snapshotId) => '$snapshots/$snapshotId/restore';
 }
 
+/// 管理端 Analytics 看板（需管理员 Bearer）。
+abstract final class AdminAnalyticsEndpoints {
+  static const String contract = String.fromEnvironment(
+    'ADMIN_ANALYTICS_CONTRACT_PATH',
+    defaultValue: '/v1/admin/analytics/contract',
+  );
+
+  static const String overview = String.fromEnvironment(
+    'ADMIN_ANALYTICS_OVERVIEW_PATH',
+    defaultValue: '/v1/admin/analytics/overview',
+  );
+
+  static const String uploadFunnel = String.fromEnvironment(
+    'ADMIN_ANALYTICS_UPLOAD_FUNNEL_PATH',
+    defaultValue: '/v1/admin/analytics/upload-funnel',
+  );
+
+  static const String aiIdentify = String.fromEnvironment(
+    'ADMIN_ANALYTICS_AI_IDENTIFY_PATH',
+    defaultValue: '/v1/admin/analytics/ai-identify',
+  );
+
+  static const String collectionGrowth = String.fromEnvironment(
+    'ADMIN_ANALYTICS_COLLECTION_GROWTH_PATH',
+    defaultValue: '/v1/admin/analytics/collection-growth',
+  );
+}
+
 /// 图鉴相关 API。
 abstract final class EncyclopediaEndpoints {
   /// 当前进度：已解锁鱼种数量 / 全图鉴物种库数量（目前后端 mock 650）。

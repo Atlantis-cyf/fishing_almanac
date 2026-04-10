@@ -10,7 +10,12 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "migrate:analytics": "node scripts/apply-analytics-migration.cjs"
+    "migrate:analytics": "node scripts/apply-analytics-migration.cjs",
+    "migrate:analytics:flat": "node scripts/apply-analytics-migration.cjs 0012_analytics_event_flat_view.sql",
+    "migrate:analytics:daily": "node scripts/apply-analytics-migration.cjs 0013_analytics_daily_kpi_view.sql",
+    "migrate:analytics:topics": "node scripts/apply-analytics-migration.cjs 0014_analytics_topic_views_and_checks.sql",
+    "migrate:analytics:overview": "node scripts/apply-analytics-migration.cjs 0015_analytics_overview_daily_and_uv_fn.sql",
+    "migrate:analytics:window": "node scripts/apply-analytics-migration.cjs 0016_analytics_window_summary_rpc.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

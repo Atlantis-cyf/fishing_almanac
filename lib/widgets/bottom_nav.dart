@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/app_font.dart';
 
@@ -68,7 +72,16 @@ class AppBottomNav extends StatelessWidget {
                     borderRadius: BorderRadius.circular(48),
                     clipBehavior: Clip.none,
                     child: InkWell(
-                      onTap: () => context.push('/record'),
+                      onTap: () {
+                        // Central upload entry click for funnel start.
+                        context.read<AnalyticsClient>().trackFireAndForget(
+                              AnalyticsEvents.uploadClick,
+                              properties: <String, dynamic>{
+                                AnalyticsProps.entryPosition: 'bottom_nav_record',
+                              },
+                            );
+                        context.push('/record');
+                      },
                       borderRadius: BorderRadius.circular(48),
                       // 整块（圆 +「记录」）可点；圆区 72×72 略大于视觉 64，减少边缘点不到。
                       child: Padding(

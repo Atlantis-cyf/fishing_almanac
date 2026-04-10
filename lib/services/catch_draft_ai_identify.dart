@@ -1,4 +1,6 @@
 import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/api/api_exception.dart';
 import 'package:fishing_almanac/services/species_identification.dart';
 import 'package:fishing_almanac/state/catch_draft.dart';
@@ -22,14 +24,14 @@ Future<void> performCatchDraftIdentification({
   draft.signalListeners();
 
   final seq = draft.aiMediaSeq;
+  final requestId = 'req_${DateTime.now().toUtc().microsecondsSinceEpoch}_$seq';
+  final sw = Stopwatch()..start();
 
   analytics.trackFireAndForget(
-    'ai_identify_requested',
+    AnalyticsEvents.aiIdentifyStart,
     properties: <String, dynamic>{
-      'has_bytes': hasBytes,
-      'has_url': hasUrl,
-      'upload_flow_id': draft.activeUploadFlowId,
-      'phase': 'prefetch_or_edit',
+      AnalyticsProps.requestId: requestId,
+      AnalyticsProps.imageId: 'media_seq_$seq',
     },
   );
 
@@ -54,10 +56,16 @@ Future<void> performCatchDraftIdentification({
       draft.aiPendingIdentifyFailureSnack = false;
       draft.aiIdentifyValidForMediaSeq = seq;
       draft.aiPendingNotFishDialog = true;
+      sw.stop();
       analytics.trackFireAndForget(
-        'ai_identify_not_fish',
+        AnalyticsEvents.aiIdentifyResult,
         properties: <String, dynamic>{
-          'upload_flow_id': draft.activeUploadFlowId,
+          AnalyticsProps.requestId: requestId,
+          AnalyticsProps.imageId: 'media_seq_$seq',
+          AnalyticsProps.speciesName: '',
+          AnalyticsProps.confidence: 0,
+          AnalyticsProps.latencyMs: sw.elapsedMilliseconds,
+          AnalyticsProps.isSuccess: true,
         },
       );
       return;
@@ -73,13 +81,16 @@ Future<void> performCatchDraftIdentification({
     draft.aiIdentifyValidForMediaSeq = seq;
 
     final aiSuccess = r.scientificName.isNotEmpty && r.scientificName != '—';
+    sw.stop();
     analytics.trackFireAndForget(
-      'ai_identify_completed',
+      AnalyticsEvents.aiIdentifyResult,
       properties: <String, dynamic>{
-        'success': aiSuccess,
-        'confidence': r.confidence,
-        'in_catalog': r.inCatalog,
-        'upload_flow_id': draft.activeUploadFlowId,
+        AnalyticsProps.requestId: requestId,
+        AnalyticsProps.imageId: 'media_seq_$seq',
+        AnalyticsProps.speciesName: r.scientificName,
+        AnalyticsProps.confidence: r.confidence,
+        AnalyticsProps.latencyMs: sw.elapsedMilliseconds,
+        AnalyticsProps.isSuccess: aiSuccess,
       },
     );
   } on ApiException catch (e) {
@@ -96,12 +107,16 @@ Future<void> performCatchDraftIdentification({
     draft.aiPendingIdentifyFailureSnack = true;
     draft.aiPendingNotFishDialog = false;
     draft.aiIdentifyValidForMediaSeq = seq;
+    sw.stop();
     analytics.trackFireAndForget(
-      'ai_identify_failed',
+      AnalyticsEvents.aiIdentifyFail,
       properties: <String, dynamic>{
-        'error_type': 'ApiException',
-        'message_len': e.message.length,
-        'upload_flow_id': draft.activeUploadFlowId,
+        AnalyticsProps.requestId: requestId,
+        AnalyticsProps.imageId: 'media_seq_$seq',
+        AnalyticsProps.errorCode: e.statusCode?.toString() ?? 'api_exception',
+        AnalyticsProps.errorMessage: e.message,
+        AnalyticsProps.latencyMs: sw.elapsedMilliseconds,
+        AnalyticsProps.isSuccess: false,
       },
     );
   } catch (e) {
@@ -118,11 +133,16 @@ Future<void> performCatchDraftIdentification({
     draft.aiPendingIdentifyFailureSnack = true;
     draft.aiPendingNotFishDialog = false;
     draft.aiIdentifyValidForMediaSeq = seq;
+    sw.stop();
     analytics.trackFireAndForget(
-      'ai_identify_failed',
+      AnalyticsEvents.aiIdentifyFail,
       properties: <String, dynamic>{
-        'error_type': 'Exception',
-        'upload_flow_id': draft.activeUploadFlowId,
+        AnalyticsProps.requestId: requestId,
+        AnalyticsProps.imageId: 'media_seq_$seq',
+        AnalyticsProps.errorCode: 'exception',
+        AnalyticsProps.errorMessage: e.toString(),
+        AnalyticsProps.latencyMs: sw.elapsedMilliseconds,
+        AnalyticsProps.isSuccess: false,
       },
     );
   } finally {

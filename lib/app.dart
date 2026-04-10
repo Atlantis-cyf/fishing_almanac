@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:fishing_almanac/api/api_client.dart';
 import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
 import 'package:fishing_almanac/auth/auth_repository.dart';
 import 'package:fishing_almanac/auth/auth_session.dart';
 import 'package:fishing_almanac/auth/token_storage.dart';
@@ -90,7 +91,7 @@ class _FishingAlmanacAppState extends State<FishingAlmanacApp> {
     _speciesCatalogService = SpeciesCatalogService(api: _apiClient);
     _router = createAppRouter(authSession: _authSession);
     unawaited(_restoreAccessToken());
-    _analytics.trackFireAndForget('app_open');
+    _analytics.trackFireAndForget(AnalyticsEvents.appLaunch);
   }
 
   void _handleUnauthorized() {
@@ -100,6 +101,7 @@ class _FishingAlmanacAppState extends State<FishingAlmanacApp> {
   Future<void> _handleUnauthorizedAsync() async {
     await _authRepository.logout();
     await _userProfile.onSessionEnded();
+    _analytics.setUserProfile(null, profile: <String, dynamic>{'logged_in': false});
     if (!mounted) return;
     final ctx = rootNavigatorKey.currentContext;
     if (ctx != null && ctx.mounted) {
@@ -113,6 +115,7 @@ class _FishingAlmanacAppState extends State<FishingAlmanacApp> {
     if (has) {
       _apiClient.setAccessToken(access);
     }
+    _analytics.setUserProfile(null, profile: <String, dynamic>{'logged_in': has});
     _authSession.markRestored(loggedIn: has);
     if (has) {
       unawaited(_userProfile.syncFromServer());

@@ -7,6 +7,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
+import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/api/api_exception.dart';
 import 'package:fishing_almanac/auth/auth_session.dart';
 import 'package:fishing_almanac/data/species_catalog.dart';
@@ -385,6 +388,13 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
               item.sourcePublishedId != null &&
               !item.reviewStatus.blocksEditingWhilePending
           ? () async {
+              context.read<AnalyticsClient>().trackFireAndForget(
+                    AnalyticsEvents.uploadClick,
+                    properties: <String, dynamic>{
+                      AnalyticsProps.entryPosition: 'feed_detail_edit',
+                      AnalyticsProps.imageId: item.sourcePublishedId,
+                    },
+                  );
               final r = context.read<CatchRepository>();
               final p = await r.getById(item.sourcePublishedId!);
               if (!context.mounted || p == null) return;
@@ -416,21 +426,21 @@ class _FeedDetailScreenState extends State<FeedDetailScreen> {
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          onPressed: () => context.pop(),
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFc3f5ff)),
-        ),
-        title: Text(
+                backgroundColor: AppColors.background,
+                surfaceTintColor: Colors.transparent,
+                leading: IconButton(
+                  onPressed: () => context.pop(),
+                  icon: const Icon(Icons.arrow_back, color: Color(0xFFc3f5ff)),
+                ),
+                title: Text(
           title,
           style: AppFont.manrope(
-            fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w700,
             fontSize: 18,
-            color: const Color(0xFFc3f5ff),
-          ),
-        ),
-        actions: [
+                    color: const Color(0xFFc3f5ff),
+                  ),
+                ),
+                actions: [
           TextButton(
             onPressed: () => context.go('/encyclopedia'),
             child: Text('图鉴', style: TextStyle(color: AppColors.cyanNav.withValues(alpha: 0.9))),
@@ -562,22 +572,22 @@ class _FeedItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-            child: Row(
-              children: [
-                Expanded(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLow,
+                    border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
                         item.locationLabel,
                         style: TextStyle(fontSize: 12, color: AppColors.onSurface.withValues(alpha: 0.7)),
                       ),
@@ -616,25 +626,25 @@ class _FeedItemCard extends StatelessWidget {
                       PopupMenuItem<String>(
                         value: 'delete',
                         child: Text('删除', style: TextStyle(color: Colors.red.shade300)),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
           const SizedBox(height: 8),
-          AspectRatio(
+                      AspectRatio(
             aspectRatio: CatchUi.photoAspectWidthOverHeight,
             child: CatchImageDisplay(
               memoryBytes: item.imageBytes,
               networkUrlFallback: item.imageUrl.isNotEmpty ? item.imageUrl : null,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                 Row(
                   children: [
                     _Tag(text: '重量 ${item.weightKg} kg'),
@@ -650,31 +660,31 @@ class _FeedItemCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 12),
-                Text(
+                            Text(
                   item.displaySpeciesZh,
                   style: AppFont.manrope(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
                   item.notes,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.6,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ),
+                              style: TextStyle(
+                                fontSize: 14,
+                                height: 1.6,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
                 const SizedBox(height: 8),
                 Text(
                   _formatTime(item.occurredAt),
                   style: TextStyle(fontSize: 11, color: AppColors.outline),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-          ),
         ],
       ),
     );

@@ -246,6 +246,11 @@ class _AdminSpeciesScreenState extends State<AdminSpeciesScreen> {
         ),
         actions: [
           IconButton(
+            onPressed: () => context.go('/admin-dashboard/overview'),
+            icon: const Icon(Icons.insights_outlined),
+            tooltip: '数据看板',
+          ),
+          IconButton(
             onPressed: _refreshing ? null : () => _fetchSpecies(silent: true),
             icon: _refreshing
                 ? const SizedBox(

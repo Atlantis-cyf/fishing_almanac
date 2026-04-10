@@ -1,6 +1,7 @@
 const { registerAdminSpeciesRoutes } = require('./routes/speciesRoutes');
 const { registerAdminMergeRoutes } = require('./routes/mergeRoutes');
 const { registerAdminSnapshotRoutes } = require('./routes/snapshotRoutes');
+const { registerAdminAnalyticsRoutes } = require('./routes/analyticsRoutes');
 
 function registerAdminRoutes(deps) {
   const {
@@ -19,6 +20,7 @@ function registerAdminRoutes(deps) {
   registerAdminSpeciesRoutes(deps);
   registerAdminMergeRoutes(deps);
   registerAdminSnapshotRoutes(deps);
+  registerAdminAnalyticsRoutes(deps);
 }
 
 module.exports = {

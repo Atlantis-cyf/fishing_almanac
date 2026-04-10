@@ -16,6 +16,14 @@ String? adminAuthRedirect(AuthSession auth, GoRouterState state) {
     return '/admin-login';
   }
 
+  // 中文注释：/admin-dashboard 无子路径时统一到 overview（与 ShellRoute 拆分方案等价，避免单独挂 redirect 路由）。
+  if (auth.isLoggedIn) {
+    final p = state.uri.path;
+    if (p == '/admin-dashboard' || p == '/admin-dashboard/') {
+      return '/admin-dashboard/overview';
+    }
+  }
+
   if (auth.isLoggedIn && (loc == '/' || loc == '/admin-login')) {
     return '/admin-species';
   }

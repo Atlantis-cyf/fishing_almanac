@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/state/catch_draft.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/catch_ui_constants.dart';
@@ -28,6 +31,12 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   Future<void> _pickPhoto() async {
+    context.read<AnalyticsClient>().trackFireAndForget(
+          AnalyticsEvents.uploadClick,
+          properties: <String, dynamic>{
+            AnalyticsProps.entryPosition: 'record_photo_picker',
+          },
+        );
     final x = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 88);
     if (x == null || !mounted) return;
     await Future<void>.delayed(Duration.zero);
@@ -284,7 +293,15 @@ class _RecordScreenState extends State<RecordScreen> {
               border: Border(top: BorderSide(color: AppColors.cyanNav.withValues(alpha: 0.08))),
             ),
             child: FilledButton(
-              onPressed: () => context.push('/select-location'),
+              onPressed: () {
+                context.read<AnalyticsClient>().trackFireAndForget(
+                      AnalyticsEvents.uploadClick,
+                      properties: <String, dynamic>{
+                        AnalyticsProps.entryPosition: 'record_next_step',
+                      },
+                    );
+                context.push('/select-location');
+              },
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
                 backgroundColor: AppColors.primaryContainer,

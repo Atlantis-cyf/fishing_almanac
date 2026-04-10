@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:fishing_almanac/api/api_client.dart';
 import 'package:fishing_almanac/api/api_config.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,6 +26,8 @@ class AnalyticsClient {
 
   String? _anonId;
   String? _sessionId;
+  String? _userId;
+  Map<String, dynamic> _userProfile = const <String, dynamic>{};
   Future<void>? _initFuture;
 
   Future<void> init() => _initFuture ??= _initInternal();
@@ -43,10 +47,58 @@ class AnalyticsClient {
 
   String? get anonId => _anonId;
   String? get sessionId => _sessionId;
+  String? get userId => _userId;
 
   void trackFireAndForget(String eventType, {Map<String, dynamic>? properties}) {
     if (!_enabled) return;
-    unawaited(track(eventType, properties: properties));
+    unawaited(trackEvent(eventType, properties: properties));
+  }
+
+  /// 统一埋点入口：自动补齐公共字段，页面侧只传业务属性。
+  Future<void> trackEvent(String eventType, {Map<String, dynamic>? properties}) {
+    return track(eventType, properties: _withCommonProperties(properties));
+  }
+
+  /// 页面曝光语义化入口（仍走统一事件上报）。
+  Future<void> pageView(String pageName, {Map<String, dynamic>? properties}) {
+    return trackEvent(pageName, properties: properties);
+  }
+
+  /// 绑定用户画像信息；后续事件自动带上 user_id 与 profile 片段。
+  void setUserProfile(String? userId, {Map<String, dynamic>? profile}) {
+    _userId = userId;
+    _userProfile = Map<String, dynamic>.from(profile ?? const <String, dynamic>{});
+  }
+
+  /// 识别反馈预留接口：当前可在任意入口直接调用，不依赖复杂 UI。
+  void trackIdentifyFeedback({
+    required String requestId,
+    String? imageId,
+    String? speciesId,
+    required bool isCorrect,
+  }) {
+    trackFireAndForget(
+      AnalyticsEvents.identifyFeedback,
+      properties: <String, dynamic>{
+        AnalyticsProps.requestId: requestId,
+        AnalyticsProps.imageId: imageId,
+        AnalyticsProps.speciesId: speciesId,
+        AnalyticsProps.isCorrect: isCorrect,
+      },
+    );
+  }
+
+  Map<String, dynamic> _withCommonProperties(Map<String, dynamic>? properties) {
+    final merged = <String, dynamic>{
+      AnalyticsProps.timestamp: DateTime.now().toUtc().toIso8601String(),
+      AnalyticsProps.platform: defaultTargetPlatform.name,
+      AnalyticsProps.appVersion: const String.fromEnvironment('APP_VERSION', defaultValue: ''),
+      AnalyticsProps.userId: _userId,
+      ..._userProfile,
+      ...?properties,
+    };
+    merged.removeWhere((key, value) => value == null);
+    return merged;
   }
 
   Future<void> track(String eventType, {Map<String, dynamic>? properties}) async {

@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/services/catch_draft_ai_identify.dart';
 import 'package:fishing_almanac/services/species_identification.dart';
 import 'package:fishing_almanac/data/image_urls.dart';
@@ -133,13 +135,6 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
         'GPS ${pos.latitude.toStringAsFixed(4)}°, ${pos.longitude.toStringAsFixed(4)}°',
       );
       if (context.mounted) setState(() {});
-      context.read<AnalyticsClient>().trackFireAndForget(
-            'upload_step_location_set',
-            properties: <String, dynamic>{
-              'mode': 'gps',
-              'upload_flow_id': draft.activeUploadFlowId,
-            },
-          );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -169,26 +164,12 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     if (ok == true && context.mounted) {
       context.read<CatchDraft>().setLocationFuzzy(ctrl.text.trim());
       setState(() {});
-      context.read<AnalyticsClient>().trackFireAndForget(
-            'upload_step_location_set',
-            properties: <String, dynamic>{
-              'mode': 'fuzzy_city',
-              'upload_flow_id': context.read<CatchDraft>().activeUploadFlowId,
-            },
-          );
     }
   }
 
   void _applySkip(BuildContext context) {
     context.read<CatchDraft>().skipLocation();
     setState(() {});
-    context.read<AnalyticsClient>().trackFireAndForget(
-          'upload_step_location_set',
-          properties: <String, dynamic>{
-            'mode': 'skip',
-            'upload_flow_id': context.read<CatchDraft>().activeUploadFlowId,
-          },
-        );
   }
 
   @override
@@ -345,7 +326,15 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(32, 8, 32, 24),
                 child: FilledButton(
-                  onPressed: () => context.push('/edit-catch'),
+                  onPressed: () {
+                    context.read<AnalyticsClient>().trackFireAndForget(
+                          AnalyticsEvents.uploadClick,
+                          properties: <String, dynamic>{
+                            AnalyticsProps.entryPosition: 'select_location_next',
+                          },
+                        );
+                    context.push('/edit-catch');
+                  },
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(56),
                     backgroundColor: const Color(0xFF22d3ee),

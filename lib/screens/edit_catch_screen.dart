@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/api/api_client.dart';
 import 'package:fishing_almanac/api/api_config.dart';
 import 'package:fishing_almanac/api/api_exception.dart';
@@ -52,6 +54,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
   bool _draftListenAttached = false;
   /// 防止连点触发两次发布逻辑（不驱动 UI 阻塞）。
   bool _publishBusy = false;
+  String _latestUploadSource = 'unknown';
 
   Timer? _manualSpeciesDebounce;
   bool _programmaticSpeciesUpdate = false;
@@ -71,15 +74,6 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       if (_lastReportedManualSpeciesValue == vv) return;
       _manualSpeciesInputCount++;
       _lastReportedManualSpeciesValue = vv;
-      final draft = context.read<CatchDraft>();
-      context.read<AnalyticsClient>().trackFireAndForget(
-            'species_manual_input',
-            properties: <String, dynamic>{
-              'count': _manualSpeciesInputCount,
-              'value_len': vv.length,
-              'upload_flow_id': draft.activeUploadFlowId,
-            },
-          );
     });
   }
 
@@ -134,33 +128,17 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     draft.activeUploadFlowId = 'flow_${DateTime.now().toUtc().millisecondsSinceEpoch}';
     if (id != null) {
       analytics.trackFireAndForget(
-        'upload_flow_start',
-        properties: <String, dynamic>{
-          'mode': 'edit_published',
-          'upload_flow_id': draft.activeUploadFlowId,
-        },
+        AnalyticsEvents.uploadClick,
+        properties: <String, dynamic>{AnalyticsProps.entryPosition: 'edit_catch_open_edit'},
       );
       scheduleMicrotask(() => _hydrateEditing(id));
     } else {
       final hasImage =
           (draft.imageBytes != null && draft.imageBytes!.isNotEmpty) || (draft.imageUrlFallback != null && draft.imageUrlFallback!.isNotEmpty);
       analytics.trackFireAndForget(
-        'upload_flow_start',
-        properties: <String, dynamic>{
-          'mode': 'new_or_draft',
-          'has_image_initial': hasImage,
-          'upload_flow_id': draft.activeUploadFlowId,
-        },
+        AnalyticsEvents.uploadClick,
+        properties: <String, dynamic>{AnalyticsProps.entryPosition: 'edit_catch_open_new'},
       );
-      if (hasImage) {
-        analytics.trackFireAndForget(
-          'upload_step_image_completed',
-          properties: <String, dynamic>{
-            'source': 'draft',
-            'upload_flow_id': draft.activeUploadFlowId,
-          },
-        );
-      }
 
       if (draft.scientificName.isNotEmpty) {
         _programmaticSpeciesUpdate = true;
@@ -195,15 +173,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
 
     final hasImage =
         (draft.imageBytes != null && draft.imageBytes!.isNotEmpty) || (draft.imageUrlFallback != null && draft.imageUrlFallback!.isNotEmpty);
-    if (hasImage) {
-      analytics.trackFireAndForget(
-        'upload_step_image_completed',
-        properties: <String, dynamic>{
-          'source': 'published',
-          'upload_flow_id': draft.activeUploadFlowId,
-        },
-      );
-    }
+    if (hasImage && _latestUploadSource == 'unknown') _latestUploadSource = 'published';
 
     draft.updateEditAiCacheOnly(
       editCacheAiScientificName: _aiScientificName ?? draft.scientificName,
@@ -467,15 +437,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     final bytes = await x.readAsBytes();
     if (!mounted) return;
     final draft = context.read<CatchDraft>();
+    _latestUploadSource = AnalyticsProps.sourceAlbum;
     draft.setPickedImageBytes(bytes);
     _resetSpeciesStateForNewImage(draft);
-    context.read<AnalyticsClient>().trackFireAndForget(
-          'upload_step_image_completed',
-      properties: <String, dynamic>{
-        'source': 'gallery',
-        'upload_flow_id': draft.activeUploadFlowId,
-      },
-        );
     await _runIdentification(draft);
   }
 
@@ -490,15 +454,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     final bytes = await x.readAsBytes();
     if (!mounted) return;
     final draft = context.read<CatchDraft>();
+    _latestUploadSource = AnalyticsProps.sourceCamera;
     draft.setPickedImageBytes(bytes);
     _resetSpeciesStateForNewImage(draft);
-    context.read<AnalyticsClient>().trackFireAndForget(
-          'upload_step_image_completed',
-      properties: <String, dynamic>{
-        'source': 'camera',
-        'upload_flow_id': draft.activeUploadFlowId,
-      },
-        );
     await _runIdentification(draft);
   }
 
@@ -599,14 +557,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       final lengthParsed = _metricOrZero(_lengthController.text);
 
       analytics.trackFireAndForget(
-        'upload_step_publish_pressed',
+        AnalyticsEvents.uploadClick,
         properties: <String, dynamic>{
-          'species_origin': speciesOrigin,
-          'ai_success': aiSuccess,
-          'image_present': imagePresent,
-          'location_type': locationType,
-          'manual_species_input_count': _manualSpeciesInputCount,
-          'upload_flow_id': draft.activeUploadFlowId,
+          AnalyticsProps.entryPosition: 'edit_catch_publish',
         },
       );
 
@@ -641,26 +594,10 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         }
       } on ApiException catch (e) {
         if (!mounted) return;
-        analytics.trackFireAndForget(
-          'upload_completed_failed',
-          properties: <String, dynamic>{
-            'error_type': 'ApiException',
-            'message_len': e.message.length,
-            'upload_flow_id': draft.activeUploadFlowId,
-          },
-        );
         _showPublishFailure(e);
         return;
       } catch (e) {
         if (!mounted) return;
-        analytics.trackFireAndForget(
-          'upload_completed_failed',
-          properties: <String, dynamic>{
-            'error_type': 'Exception',
-            'message': e.toString(),
-            'upload_flow_id': draft.activeUploadFlowId,
-          },
-        );
         _showPublishFailure(ApiException(message: e.toString()));
         return;
       }
@@ -684,10 +621,8 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         'manual_species_input_count': _manualSpeciesInputCount,
         'upload_flow_id': draft.activeUploadFlowId,
       };
-      final failBaseProps = <String, dynamic>{
-        'upload_flow_id': draft.activeUploadFlowId,
-      };
       final uploadFlowGuard = draft.activeUploadFlowId;
+      final publishStartedAtMs = DateTime.now().toUtc().millisecondsSinceEpoch;
 
       if (!mounted) return;
       context.go('/home');
@@ -707,9 +642,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         needSpeciesCatalogCreate: needSpeciesCatalogCreate,
         resolvedScientific: resolvedScientific,
         successProps: successProps,
-        failBaseProps: failBaseProps,
         editingPublishedIdForRetry: editingId,
         uploadFlowGuard: uploadFlowGuard,
+        publishStartedAtMs: publishStartedAtMs,
       ));
     } finally {
       _publishBusy = false;
@@ -731,9 +666,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     required bool needSpeciesCatalogCreate,
     required String resolvedScientific,
     required Map<String, dynamic> successProps,
-    required Map<String, dynamic> failBaseProps,
     required String? editingPublishedIdForRetry,
     required String? uploadFlowGuard,
+    required int publishStartedAtMs,
   }) async {
     try {
       if (needSpeciesCatalogCreate) {
@@ -774,39 +709,15 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         imageAuthorized: imageAuthorized,
       );
     } on ApiException catch (e) {
-      analytics.trackFireAndForget(
-        'upload_completed_failed',
-        properties: <String, dynamic>{
-          ...failBaseProps,
-          'error_type': 'ApiException',
-          'message_len': e.message.length,
-        },
-      );
       _showPublishFailureFromRoot(e, editingPublishedIdForRetry: editingPublishedIdForRetry);
       return;
     } on PersistenceException catch (e) {
-      analytics.trackFireAndForget(
-        'upload_completed_failed',
-        properties: <String, dynamic>{
-          ...failBaseProps,
-          'error_type': 'PersistenceException',
-          'message_len': e.message.length,
-        },
-      );
       _showPublishFailureFromRoot(
         ApiException(message: e.message),
         editingPublishedIdForRetry: editingPublishedIdForRetry,
       );
       return;
     } catch (e) {
-      analytics.trackFireAndForget(
-        'upload_completed_failed',
-        properties: <String, dynamic>{
-          ...failBaseProps,
-          'error_type': 'Exception',
-          'message': e.toString(),
-        },
-      );
       _showPublishFailureFromRoot(
         ApiException(message: e.toString()),
         editingPublishedIdForRetry: editingPublishedIdForRetry,
@@ -817,7 +728,17 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     if (draft.activeUploadFlowId == uploadFlowGuard) {
       draft.clearForNewRecord();
     }
-    analytics.trackFireAndForget('upload_completed_success', properties: successProps);
+    analytics.trackFireAndForget(
+      AnalyticsEvents.uploadSuccess,
+      properties: <String, dynamic>{
+        AnalyticsProps.source: _latestUploadSource,
+        AnalyticsProps.uploadDurationMs:
+            DateTime.now().toUtc().millisecondsSinceEpoch - publishStartedAtMs,
+        AnalyticsProps.imageId: saved.id,
+        AnalyticsProps.fileSize: imageBytesForPublish?.length,
+        ...successProps,
+      },
+    );
   }
 
   void _presentPublishFailure(
@@ -940,40 +861,40 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
             padding: EdgeInsets.only(top: topPad, left: 4, right: 8, bottom: 8),
             child: Stack(
               alignment: Alignment.center,
-              children: [
+                children: [
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
                     onPressed: () => _onClosePressed(context),
                     icon: const Icon(Icons.close, color: AppColors.cyanNav, size: 26),
                   ),
-                ),
-                Text(
-                  '编辑鱼获详情',
+                  ),
+                  Text(
+                    '编辑鱼获详情',
                   style: AppFont.manrope(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 20,
                     color: AppColors.cyanNav,
                   ),
-                ),
-              ],
+                  ),
+                ],
             ),
           ),
           Expanded(
             child: IgnorePointer(
               ignoring: reviewLocksEditing,
-              child: SingleChildScrollView(
+            child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                child: Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: AspectRatio(
                       aspectRatio: CatchUi.photoAspectWidthOverHeight,
-                      child: Stack(
+                    child: Stack(
                         fit: StackFit.expand,
-                        children: [
+                      children: [
                           CatchImageDisplay(
                             memoryBytes: draft.imageBytes,
                             networkUrlFallback: draft.imageUrlFallback,
@@ -983,22 +904,22 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                             right: 0,
                             bottom: 0,
                             height: 100,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: [
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
                                     Colors.black.withValues(alpha: 0.55),
-                                    Colors.transparent,
-                                  ],
-                                ),
+                                  Colors.transparent,
+                                ],
                               ),
                             ),
                           ),
-                          Positioned(
+                        ),
+                        Positioned(
                             right: 16,
-                            bottom: 16,
+                          bottom: 16,
                             child: Material(
                               color: AppColors.primaryContainer,
                               shape: const CircleBorder(),
@@ -1041,9 +962,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                                     ],
                                   ),
                                 ),
-                              ),
-                            ),
-                        ],
+                          ),
+                        ),
+                      ],
                       ),
                     ),
                   ),
@@ -1124,26 +1045,26 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
                     controller: _notesController,
                     maxLines: 5,
                     style: const TextStyle(color: AppColors.onSurface, height: 1.45),
-                    decoration: InputDecoration(
+                          decoration: InputDecoration(
                       hintText: '添加捕获心得或使用的饵料…',
                       hintStyle: TextStyle(color: AppColors.onSurfaceVariant.withValues(alpha: 0.55)),
-                      filled: true,
+                            filled: true,
                       fillColor: AppColors.surfaceContainerHigh.withValues(alpha: 0.55),
-                      border: OutlineInputBorder(
+                            border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: AppColors.outlineVariant.withValues(alpha: 0.2)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: AppColors.outlineVariant.withValues(alpha: 0.15)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
+                            ),
+                            focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: AppColors.cyanNav.withValues(alpha: 0.5)),
                       ),
@@ -1187,7 +1108,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+                    children: [
                             Icon(
                               reviewLocksEditing ? Icons.lock_outline_rounded : Icons.send_rounded,
                               color: const Color(0xFF0f172a),
@@ -1209,12 +1130,12 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                   ),
                 ),
               ],
-            ),
-          ),
-            ],
-          ),
-        ],
-      ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
     );
   }
 }

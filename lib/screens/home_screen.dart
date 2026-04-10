@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
 import 'package:fishing_almanac/data/image_urls.dart';
 import 'package:fishing_almanac/data/species_catalog.dart';
 import 'package:fishing_almanac/models/catch_feed_item.dart';
@@ -30,10 +32,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<CatchFeedItem>>? _timelineFuture;
   int _lastGen = -1;
   bool _catalogFetchRequested = false;
+  bool _homeViewTracked = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_homeViewTracked) {
+      _homeViewTracked = true;
+      context.read<AnalyticsClient>().trackFireAndForget(AnalyticsEvents.homeView);
+    }
     if (!_catalogFetchRequested) {
       _catalogFetchRequested = true;
       unawaited(context.read<SpeciesCatalogService>().fetchIfNeeded());

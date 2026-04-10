@@ -12,6 +12,8 @@ import 'package:fishing_almanac/data/species_catalog.dart';
 import 'package:fishing_almanac/models/species_catalog_entry.dart';
 import 'package:fishing_almanac/models/species_item.dart';
 import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/repositories/catch_repository.dart';
 import 'package:fishing_almanac/services/species_catalog_service.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
@@ -88,10 +90,12 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
 
   /// key: `scientific_name`（与 catalog 一致），value: 渔获条数（approved）。
   Map<String, int> _myCatchCounts = const {};
+  bool _collectionViewTracked = false;
 
   /// Cross-navigation cache: survives widget rebuilds within the same session.
   static Map<String, int>? _cachedCounts;
   static DateTime? _cachedAt;
+  static final Set<String> _reportedUnlockedSpecies = <String>{};
 
   /// 待解锁占位：三种目标的学名（与 [SpeciesCatalog] 一致）。
   static const List<String> _featuredLockedScientific = <String>[
@@ -137,7 +141,6 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
 
       unawaited(catalogSvc.fetchIfNeeded());
 
-      context.read<AnalyticsClient>().trackFireAndForget('encyclopedia_open');
       await _loadEncyclopedia();
     });
   }
@@ -196,7 +199,24 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
 
   static const Duration _cacheMaxAge = Duration(seconds: 30);
 
+  void _trackCollectionViewIfNeeded(AnalyticsClient analytics, Map<String, int> counts, int total) {
+    if (_collectionViewTracked) return;
+    _collectionViewTracked = true;
+    final unlocked = counts.entries.where((e) => e.value > 0).length;
+    final completionRate = total <= 0 ? 0.0 : (unlocked / total);
+    analytics.trackFireAndForget(
+      AnalyticsEvents.collectionView,
+      properties: <String, dynamic>{
+        AnalyticsProps.unlockedSpeciesCount: unlocked,
+        AnalyticsProps.totalSpeciesCount: total,
+        AnalyticsProps.completionRate: completionRate,
+      },
+    );
+  }
+
   Future<void> _loadEncyclopedia() async {
+    final analytics = context.read<AnalyticsClient>();
+    final previousCounts = Map<String, int>.from(_myCatchCounts);
     final api = context.read<ApiClient>();
     final repo = context.read<CatchRepository>();
     final loggedIn = context.read<AuthSession>().isLoggedIn;
@@ -215,7 +235,10 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
       });
     }
 
-    if (hasFreshCache) return;
+    if (hasFreshCache) {
+      _trackCollectionViewIfNeeded(analytics, _cachedCounts ?? _myCatchCounts, total);
+      return;
+    }
 
     final counts = <String, int>{};
     String? err;
@@ -274,6 +297,24 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
       _totalCount = total;
       _myCatchCounts = counts;
     });
+
+    // First page impression tracking with key collection metrics.
+    _trackCollectionViewIfNeeded(analytics, counts, total);
+
+    // Unlock event: species seen now but not previously unlocked.
+    for (final e in counts.entries) {
+      final before = previousCounts[e.key] ?? 0;
+      if (before > 0 || e.value <= 0 || _reportedUnlockedSpecies.contains(e.key)) continue;
+      _reportedUnlockedSpecies.add(e.key);
+      analytics.trackFireAndForget(
+        AnalyticsEvents.speciesUnlock,
+        properties: <String, dynamic>{
+          AnalyticsProps.speciesName: e.key,
+          AnalyticsProps.isFirstTime: true,
+          AnalyticsProps.unlockSource: AnalyticsProps.unlockSourceAiIdentify,
+        },
+      );
+    }
   }
 
   List<_SpeciesCardModel> _buildAllCards() {
@@ -557,13 +598,6 @@ class _EncyclopediaScreenState extends State<EncyclopediaScreen> {
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () {
-                            context.read<AnalyticsClient>().trackFireAndForget(
-                                  'encyclopedia_species_click',
-                                  properties: <String, dynamic>{
-                                    'speciesScientificName': card.speciesScientificName,
-                                    'target': 'species-detail',
-                                  },
-                                );
                             context.push('/species-detail', extra: card.speciesScientificName);
                           },
                           child: Column(

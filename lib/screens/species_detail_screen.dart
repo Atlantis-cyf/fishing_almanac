@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'package:fishing_almanac/analytics/analytics_client.dart';
+import 'package:fishing_almanac/analytics/analytics_events.dart';
+import 'package:fishing_almanac/analytics/analytics_props.dart';
 import 'package:fishing_almanac/data/species_catalog.dart';
 import 'package:fishing_almanac/models/catch_feed_item.dart';
 import 'package:fishing_almanac/models/feed_detail_extra.dart';
@@ -41,6 +44,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
   Future<List<List<CatchFeedItem>>>? _detailFuture;
   int _lastGen = -1;
   String? _lastScientific;
+  bool _detailViewTracked = false;
 
   @override
   void didUpdateWidget(covariant SpeciesDetailScreen oldWidget) {
@@ -48,6 +52,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
     if (oldWidget.speciesScientificName != widget.speciesScientificName) {
       _lastGen = -1;
       _lastScientific = null;
+      _detailViewTracked = false;
     }
   }
 
@@ -94,6 +99,17 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
             (snap.hasData && snap.data!.length >= 2) ? snap.data![0] : <CatchFeedItem>[];
         final allForSpecies =
             (snap.hasData && snap.data!.length >= 2) ? snap.data![1] : <CatchFeedItem>[];
+
+        if (!_detailViewTracked && snap.hasData) {
+          _detailViewTracked = true;
+          context.read<AnalyticsClient>().trackFireAndForget(
+            AnalyticsEvents.speciesDetailView,
+            properties: <String, dynamic>{
+              AnalyticsProps.speciesName: widget.speciesScientificName,
+              AnalyticsProps.unlocked: userOnly.isNotEmpty,
+            },
+          );
+        }
 
         return Scaffold(
           extendBody: true,
