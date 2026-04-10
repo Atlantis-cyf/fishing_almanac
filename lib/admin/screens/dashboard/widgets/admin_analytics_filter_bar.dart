@@ -9,18 +9,26 @@ class AdminAnalyticsFilterBar extends StatelessWidget {
     super.key,
     required this.timeRange,
     required this.onTimeRangeChanged,
-    required this.platformController,
+    required this.platformValue,
+    required this.onPlatformChanged,
+    required this.platformOptions,
     required this.onApply,
-    this.entryPositionController,
+    this.entryPositionValue,
+    this.onEntryPositionChanged,
+    this.entryPositionOptions = const <String>[],
     this.customFromController,
     this.customToController,
   });
 
   final String timeRange;
   final ValueChanged<String> onTimeRangeChanged;
-  final TextEditingController platformController;
+  final String? platformValue;
+  final ValueChanged<String?> onPlatformChanged;
+  final List<String> platformOptions;
   final VoidCallback onApply;
-  final TextEditingController? entryPositionController;
+  final String? entryPositionValue;
+  final ValueChanged<String?>? onEntryPositionChanged;
+  final List<String> entryPositionOptions;
   final TextEditingController? customFromController;
   final TextEditingController? customToController;
 
@@ -62,26 +70,53 @@ class AdminAnalyticsFilterBar extends StatelessWidget {
                   },
                 ),
                 SizedBox(
-                  width: 120,
-                  child: TextField(
-                    controller: platformController,
+                  width: 150,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: platformOptions.contains(platformValue)
+                        ? platformValue
+                        : null,
+                    isDense: true,
                     decoration: const InputDecoration(
-                      labelText: 'platform（可选）',
-                      isDense: true,
+                      labelText: 'platform',
                       border: OutlineInputBorder(),
                     ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('全部平台'),
+                      ),
+                      ...platformOptions.map(
+                        (v) =>
+                            DropdownMenuItem<String>(value: v, child: Text(v)),
+                      ),
+                    ],
+                    onChanged: onPlatformChanged,
                   ),
                 ),
-                if (entryPositionController != null)
+                if (onEntryPositionChanged != null)
                   SizedBox(
-                    width: 160,
-                    child: TextField(
-                      controller: entryPositionController,
+                    width: 200,
+                    child: DropdownButtonFormField<String>(
+                      initialValue:
+                          entryPositionOptions.contains(entryPositionValue)
+                              ? entryPositionValue
+                              : null,
+                      isDense: true,
                       decoration: const InputDecoration(
-                        labelText: 'entry_position（可选）',
-                        isDense: true,
+                        labelText: 'entry_position',
                         border: OutlineInputBorder(),
                       ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('全部入口'),
+                        ),
+                        ...entryPositionOptions.map(
+                          (v) => DropdownMenuItem<String>(
+                              value: v, child: Text(v)),
+                        ),
+                      ],
+                      onChanged: onEntryPositionChanged,
                     ),
                   ),
                 FilledButton(

@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 
 import 'package:fishing_almanac/admin/analytics/dashboard_contract.dart';
 import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_analytics_filter_bar.dart';
+import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_dashboard_business_content.dart';
 import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_dashboard_layouts.dart';
-import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_dashboard_page_content.dart';
 import 'package:fishing_almanac/api/api_client.dart';
 import 'package:fishing_almanac/api/api_config.dart';
 import 'package:fishing_almanac/api/api_exception.dart';
@@ -29,8 +29,8 @@ class AdminAnalyticsTabBody extends StatefulWidget {
 
 class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
   String _timeRange = '7d';
-  late final TextEditingController _platformController;
-  late final TextEditingController _entryController;
+  String? _platform;
+  String? _entryPosition;
   late final TextEditingController _fromController;
   late final TextEditingController _toController;
 
@@ -44,12 +44,12 @@ class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
   final Map<String, Map<String, dynamic>?> _extraSummaries = {};
   final Map<String, List<dynamic>> _extraDailies = {};
   final Map<String, Object?> _debugRaw = {};
+  List<String> _platformOptions = const [];
+  List<String> _entryPositionOptions = const [];
 
   @override
   void initState() {
     super.initState();
-    _platformController = TextEditingController();
-    _entryController = TextEditingController();
     _fromController = TextEditingController();
     _toController = TextEditingController();
     WidgetsBinding.instance.addPostFrameCallback((_) => _fetch());
@@ -57,8 +57,6 @@ class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
 
   @override
   void dispose() {
-    _platformController.dispose();
-    _entryController.dispose();
     _fromController.dispose();
     _toController.dispose();
     super.dispose();
@@ -66,10 +64,10 @@ class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
 
   Map<String, dynamic> _buildQueryParameters() {
     final q = <String, dynamic>{'time_range': _timeRange};
-    final p = _platformController.text.trim();
+    final p = _platform?.trim() ?? '';
     if (p.isNotEmpty) q['platform'] = p;
     if (widget.showEntryPosition) {
-      final e = _entryController.text.trim();
+      final e = _entryPosition?.trim() ?? '';
       if (e.isNotEmpty) q['entry_position'] = e;
     }
     if (_timeRange == 'custom') {
@@ -120,6 +118,54 @@ class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
     return root;
   }
 
+  List<String> _sortedSet(Iterable<String> items) {
+    final out = items
+        .where((e) => e.trim().isNotEmpty)
+        .map((e) => e.trim())
+        .toSet()
+        .toList()
+      ..sort();
+    return out;
+  }
+
+  void _deriveFilterOptions({
+    required List<dynamic> primaryDaily,
+    required Map<String, List<dynamic>> extraDailies,
+  }) {
+    final platformSet = <String>{};
+    final entrySet = <String>{};
+
+    void ingestDaily(List<dynamic> rows) {
+      for (final x in rows) {
+        if (x is! Map) continue;
+        final row = Map<String, dynamic>.from(x);
+        final p = row['platform']?.toString();
+        if (p != null && p.trim().isNotEmpty) platformSet.add(p.trim());
+
+        final e = row['entry_position_bucket']?.toString() ??
+            row['entry_position']?.toString();
+        if (e != null && e.trim().isNotEmpty) {
+          final t = e.trim();
+          if (t != '__rollup__' && t != '__all__') entrySet.add(t);
+        }
+      }
+    }
+
+    ingestDaily(primaryDaily);
+    for (final d in extraDailies.values) {
+      ingestDaily(d);
+    }
+    if (_platform != null && _platform!.trim().isNotEmpty) {
+      platformSet.add(_platform!.trim());
+    }
+    if (_entryPosition != null && _entryPosition!.trim().isNotEmpty) {
+      entrySet.add(_entryPosition!.trim());
+    }
+
+    _platformOptions = _sortedSet(platformSet);
+    _entryPositionOptions = _sortedSet(entrySet);
+  }
+
   Future<void> _fetch() async {
     setState(() {
       _loading = true;
@@ -166,6 +212,8 @@ class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
         _debugRaw
           ..clear()
           ..addAll(debugRaw);
+        _deriveFilterOptions(
+            primaryDaily: dailyList, extraDailies: extraDailies);
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -190,9 +238,15 @@ class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
         AdminAnalyticsFilterBar(
           timeRange: _timeRange,
           onTimeRangeChanged: (v) => setState(() => _timeRange = v),
-          platformController: _platformController,
-          entryPositionController:
-              widget.showEntryPosition ? _entryController : null,
+          platformValue: _platform,
+          platformOptions: _platformOptions,
+          onPlatformChanged: (v) => setState(() => _platform = v),
+          entryPositionValue: widget.showEntryPosition ? _entryPosition : null,
+          onEntryPositionChanged: widget.showEntryPosition
+              ? (v) => setState(() => _entryPosition = v)
+              : null,
+          entryPositionOptions:
+              widget.showEntryPosition ? _entryPositionOptions : const [],
           customFromController: _fromController,
           customToController: _toController,
           onApply: _fetch,
@@ -240,7 +294,7 @@ class _AdminAnalyticsTabBodyState extends State<AdminAnalyticsTabBody> {
                           children: [
                             if (empty) const AdminAnalyticsEmptyHint(),
                             Expanded(
-                              child: AdminDashboardPageContent(
+                              child: AdminDashboardBusinessContent(
                                 mode: widget.mode,
                                 cardWidth: cardW,
                                 summary: _summary,

@@ -29,6 +29,9 @@ function nRate(v) {
 
 const FLAT_PAGE_SIZE = 1000;
 const FLAT_MAX_ROWS = 50000;
+// 误触防抖窗口：用于过滤一次点击流程中的快速双击/三击（毫秒级）。
+const UPLOAD_CLICK_DEDUP_MS = 600;
+const AI_EVENTS = ['ai_identify_start', 'ai_identify_result', 'ai_identify_fail'];
 
 /**
  * 分页拉平 analytics_event_flat_v / analytics_events，在管理端数据量下做补充聚合。
@@ -51,6 +54,263 @@ async function fetchAllPaged(supabaseAdmin, buildQuery) {
     if (from >= FLAT_MAX_ROWS) break;
   }
   return out;
+}
+
+/**
+ * 口径：DAU = 当天触发 app_launch 的去重用户数（identity_key）。
+ * 返回按日（全平台）和按日+平台两个层级，便于 summary 与 daily 同步。
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {{ utc_date_from: string, utc_date_to: string, platform: string | null }} filter
+ */
+async function computeAppLaunchDauMetrics(supabaseAdmin, filter) {
+  const rows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('event_date, platform, identity_key')
+      .eq('event_type', 'app_launch')
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to);
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    return q;
+  });
+
+  /** @type {Map<string, Set<string>>} */
+  const dayIdentity = new Map();
+  /** @type {Map<string, Set<string>>} */
+  const dayPlatformIdentity = new Map();
+  const windowIdentity = new Set();
+  for (const r of rows) {
+    const d = String(r.event_date || '');
+    const p = String(r.platform || '__unknown__');
+    const id = r.identity_key != null ? String(r.identity_key) : '';
+    if (!d || !id) continue;
+
+    if (!dayIdentity.has(d)) dayIdentity.set(d, new Set());
+    dayIdentity.get(d).add(id);
+    windowIdentity.add(id);
+
+    const k = `${d}\0${p}`;
+    if (!dayPlatformIdentity.has(k)) dayPlatformIdentity.set(k, new Set());
+    dayPlatformIdentity.get(k).add(id);
+  }
+
+  /** @type {Record<string, number>} */
+  const dauByDay = {};
+  for (const [d, s] of dayIdentity.entries()) {
+    dauByDay[d] = s.size;
+  }
+
+  /** @type {Record<string, number>} */
+  const dauByDayPlatform = {};
+  for (const [k, s] of dayPlatformIdentity.entries()) {
+    dauByDayPlatform[k] = s.size;
+  }
+
+  return {
+    // summary DAU 口径：筛选窗口结束日（utc_date_to）当日 DAU。
+    summary_dau: dauByDay[filter.utc_date_to] || 0,
+    window_app_launch_uv: windowIdentity.size,
+    dauByDay,
+    dauByDayPlatform,
+  };
+}
+
+/**
+ * upload_click 去重口径：同 identity_key + platform + entry_position，
+ * 在短时间窗口内的重复点击只计一次。
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {{ utc_date_from: string, utc_date_to: string, platform: string | null, entry_position: string | null }} filter
+ */
+async function computeUploadClickDedupMetrics(supabaseAdmin, filter) {
+  const rows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('event_date, platform, entry_position, identity_key, occurred_at')
+      .eq('event_type', 'upload_click')
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to)
+      .order('occurred_at', { ascending: true });
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    if (filter.entry_position) q = q.eq('entry_position', filter.entry_position);
+    return q;
+  });
+
+  /** @type {Map<string, number>} */
+  const lastTsByIdentityBucket = new Map();
+  /** @type {Record<string, number>} */
+  const byDayPlatform = {};
+  /** @type {Record<string, number>} */
+  const byDayPlatformEntry = {};
+  /** @type {Record<string, number>} */
+  const byEntry = {};
+  let total = 0;
+
+  for (const r of rows) {
+    const d = String(r.event_date || '');
+    const p = String(r.platform || '__unknown__');
+    const entry = r.entry_position != null && String(r.entry_position).trim() !== ''
+      ? String(r.entry_position)
+      : '__all__';
+    const id = r.identity_key != null ? String(r.identity_key) : '';
+    const ts = Date.parse(String(r.occurred_at || ''));
+    if (!d || !id || Number.isNaN(ts)) continue;
+
+    const dedupKey = `${id}\0${p}\0${entry}`;
+    const prev = lastTsByIdentityBucket.get(dedupKey);
+    if (prev != null && ts - prev <= UPLOAD_CLICK_DEDUP_MS) {
+      continue;
+    }
+    lastTsByIdentityBucket.set(dedupKey, ts);
+
+    total += 1;
+    const kDayPlatform = `${d}\0${p}`;
+    const kDayPlatformEntry = `${d}\0${p}\0${entry}`;
+    byDayPlatform[kDayPlatform] = (byDayPlatform[kDayPlatform] || 0) + 1;
+    byDayPlatformEntry[kDayPlatformEntry] = (byDayPlatformEntry[kDayPlatformEntry] || 0) + 1;
+    if (entry !== '__all__') {
+      byEntry[entry] = (byEntry[entry] || 0) + 1;
+    }
+  }
+
+  return {
+    total,
+    byDayPlatform,
+    byDayPlatformEntry,
+    byEntry,
+  };
+}
+
+/**
+ * Collection 口径补齐：窗口内访问次数、访问UV、解锁次数、解锁用户数。
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {{ utc_date_from: string, utc_date_to: string, platform: string | null }} filter
+ */
+async function computeCollectionFlatExtras(supabaseAdmin, filter) {
+  const rows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('event_date, platform, event_type, identity_key')
+      .in('event_type', ['species_unlock', 'collection_view', 'species_detail_view'])
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to);
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    return q;
+  });
+
+  let collection_view_count = 0;
+  let species_detail_view_count = 0;
+  let species_unlock_count = 0;
+  const collectionUv = new Set();
+  const detailUv = new Set();
+  const unlockUv = new Set();
+  /** @type {Record<string, number>} */
+  const unlockCountByDayPlatform = {};
+
+  for (const r of rows) {
+    const t = String(r.event_type || '');
+    const id = r.identity_key != null ? String(r.identity_key) : '';
+    const d = String(r.event_date || '');
+    const p = String(r.platform || '__unknown__');
+    if (t === 'collection_view') {
+      collection_view_count += 1;
+      if (id) collectionUv.add(id);
+    } else if (t === 'species_detail_view') {
+      species_detail_view_count += 1;
+      if (id) detailUv.add(id);
+    } else if (t === 'species_unlock') {
+      species_unlock_count += 1;
+      if (id) unlockUv.add(id);
+      if (d) {
+        const k = `${d}\0${p}`;
+        unlockCountByDayPlatform[k] = (unlockCountByDayPlatform[k] || 0) + 1;
+      }
+    }
+  }
+
+  return {
+    collection_view_count,
+    species_detail_view_count,
+    species_unlock_count,
+    collection_view_uv: collectionUv.size,
+    species_detail_view_uv: detailUv.size,
+    species_unlock_user_uv: unlockUv.size,
+    unlockCountByDayPlatform,
+  };
+}
+
+/**
+ * AI 请求口径：基于 request_id 去重统计发起/成功/失败请求数。
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {{ utc_date_from: string, utc_date_to: string, platform: string | null }} filter
+ */
+async function computeAiDedupRequestMetrics(supabaseAdmin, filter) {
+  const rows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('event_date, platform, event_type, request_id, identity_key')
+      .in('event_type', AI_EVENTS)
+      .not('request_id', 'is', null)
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to);
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    return q;
+  });
+
+  const start = new Set();
+  const success = new Set();
+  const fail = new Set();
+  const successUsers = new Set();
+  /** @type {Map<string, Set<string>>} */
+  const startByDayPlatform = new Map();
+  /** @type {Map<string, Set<string>>} */
+  const successByDayPlatform = new Map();
+  /** @type {Map<string, Set<string>>} */
+  const failByDayPlatform = new Map();
+
+  for (const r of rows) {
+    const req = r.request_id != null ? String(r.request_id).trim() : '';
+    if (!req) continue;
+    const type = String(r.event_type || '');
+    const day = String(r.event_date || '');
+    const platform = String(r.platform || '__unknown__');
+    const k = `${day}\0${platform}`;
+    if (type === 'ai_identify_start') {
+      start.add(req);
+      if (!startByDayPlatform.has(k)) startByDayPlatform.set(k, new Set());
+      startByDayPlatform.get(k).add(req);
+    } else if (type === 'ai_identify_result') {
+      success.add(req);
+      if (r.identity_key != null && String(r.identity_key).trim() !== '') {
+        successUsers.add(String(r.identity_key).trim());
+      }
+      if (!successByDayPlatform.has(k)) successByDayPlatform.set(k, new Set());
+      successByDayPlatform.get(k).add(req);
+    } else if (type === 'ai_identify_fail') {
+      fail.add(req);
+      if (!failByDayPlatform.has(k)) failByDayPlatform.set(k, new Set());
+      failByDayPlatform.get(k).add(req);
+    }
+  }
+
+  /** @type {Record<string, number>} */
+  const startDaily = {};
+  /** @type {Record<string, number>} */
+  const successDaily = {};
+  /** @type {Record<string, number>} */
+  const failDaily = {};
+  for (const [k, v] of startByDayPlatform.entries()) startDaily[k] = v.size;
+  for (const [k, v] of successByDayPlatform.entries()) successDaily[k] = v.size;
+  for (const [k, v] of failByDayPlatform.entries()) failDaily[k] = v.size;
+
+  return {
+    start_count: start.size,
+    success_count: success.size,
+    fail_count: fail.size,
+    success_user_uv: successUsers.size,
+    startDaily,
+    successDaily,
+    failDaily,
+  };
 }
 
 /**
@@ -204,12 +464,17 @@ async function fetchOverviewAggregate(supabaseAdmin, filter) {
 
   const list = rows || [];
 
-  const { data: uvRaw, error: uvErr } = await supabaseAdmin.rpc('admin_analytics_active_uv', {
-    p_from: filter.utc_date_from,
-    p_to: filter.utc_date_to,
-    p_platform: filter.platform || null,
+  const dauMetrics = await computeAppLaunchDauMetrics(supabaseAdmin, filter);
+  const clickDedup = await computeUploadClickDedupMetrics(supabaseAdmin, {
+    ...filter,
+    entry_position: null,
   });
-  if (uvErr) throw new Error(uvErr.message || String(uvErr));
+  const uploadExtras = await computeUploadFlatExtras(supabaseAdmin, {
+    ...filter,
+    entry_position: null,
+  });
+  const collectionExtras = await computeCollectionFlatExtras(supabaseAdmin, filter);
+  const aiDedup = await computeAiDedupRequestMetrics(supabaseAdmin, filter);
 
   let appLaunch = 0;
   let uploadClick = 0;
@@ -221,7 +486,8 @@ async function fetchOverviewAggregate(supabaseAdmin, filter) {
 
   for (const r of list) {
     appLaunch += n(r.app_launch_count);
-    uploadClick += n(r.upload_click_count);
+    const k = `${r.event_date}\0${r.platform}`;
+    uploadClick += clickDedup.byDayPlatform[k] || 0;
     uploadSuccess += n(r.upload_success_count);
     aiStart += n(r.ai_identify_start_count);
     aiResult += n(r.ai_identify_result_count);
@@ -236,14 +502,24 @@ async function fetchOverviewAggregate(supabaseAdmin, filter) {
   return {
     summary: {
       app_launch_count: appLaunch,
+      app_launch_uv: dauMetrics.window_app_launch_uv,
       upload_click_count: uploadClick,
       upload_success_count: uploadSuccess,
+      upload_click_uv: n(uploadExtras.upload_click_uv),
+      upload_success_uv: n(uploadExtras.upload_success_uv),
       ai_identify_start_count: aiStart,
       ai_identify_result_count: aiResult,
+      ai_identify_success_request_count: n(aiDedup.success_count),
+      ai_identify_success_uv: n(aiDedup.success_user_uv),
       ai_identify_fail_count: aiFail,
       collection_view_count: collectionView,
-      active_users_uv: n(uvRaw),
-      upload_conversion_rate,
+      species_unlock_count: n(collectionExtras.species_unlock_count),
+      species_unlock_user_uv: n(collectionExtras.species_unlock_user_uv),
+      collection_view_uv: n(collectionExtras.collection_view_uv),
+      // DAU 口径：窗口结束日（utc_date_to）触发 app_launch 的去重用户数。
+      active_users_uv: dauMetrics.summary_dau,
+      upload_success_rate: upload_conversion_rate,
+      upload_conversion_rate: upload_conversion_rate,
       identify_success_rate,
       identify_fail_rate,
     },
@@ -251,14 +527,23 @@ async function fetchOverviewAggregate(supabaseAdmin, filter) {
       event_date: r.event_date,
       platform: r.platform,
       app_launch_count: n(r.app_launch_count),
-      upload_click_count: n(r.upload_click_count),
+      upload_click_count: clickDedup.byDayPlatform[`${r.event_date}\0${r.platform}`] || 0,
       upload_success_count: n(r.upload_success_count),
       ai_identify_start_count: n(r.ai_identify_start_count),
       ai_identify_result_count: n(r.ai_identify_result_count),
       ai_identify_fail_count: n(r.ai_identify_fail_count),
       collection_view_count: n(r.collection_view_count),
-      active_users_uv: n(r.active_users_uv),
-      upload_conversion_rate: nRate(r.upload_conversion_rate),
+      species_unlock_count:
+        collectionExtras.unlockCountByDayPlatform[`${r.event_date}\0${r.platform}`] || 0,
+      // daily 的 DAU：当天 app_launch 去重用户数（按日+平台）。
+      active_users_uv: dauMetrics.dauByDayPlatform[`${r.event_date}\0${r.platform}`] || 0,
+      // 全平台日 DAU（用于前端按天趋势，不受平台分面重复影响）。
+      app_launch_uv_day_global: dauMetrics.dauByDay[`${r.event_date}`] || 0,
+      upload_conversion_rate:
+        (clickDedup.byDayPlatform[`${r.event_date}\0${r.platform}`] || 0) === 0
+          ? 0
+          : n(r.upload_success_count) /
+            (clickDedup.byDayPlatform[`${r.event_date}\0${r.platform}`] || 0),
       identify_success_rate: nRate(r.identify_success_rate),
       identify_fail_rate: nRate(r.identify_fail_rate),
     })),
@@ -287,14 +572,8 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
   if (error) throw new Error(error.message || String(error));
   const list = rows || [];
 
-  /** @type {Record<string, number>} */
-  const entry_position_click_mix = {};
-  for (const r of list) {
-    const b = r.entry_position_bucket;
-    if (b == null || b === '__rollup__' || b === '__all__') continue;
-    const k = String(b);
-    entry_position_click_mix[k] = (entry_position_click_mix[k] || 0) + n(r.upload_click_count);
-  }
+  const clickDedup = await computeUploadClickDedupMetrics(supabaseAdmin, filter);
+  const entry_position_click_mix = { ...clickDedup.byEntry };
 
   /** @type {typeof list} */
   let effectiveRows = list;
@@ -319,7 +598,9 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
         });
       }
       const m = merged.get(key);
-      m.upload_click_count += n(r.upload_click_count);
+      m.upload_click_count += clickDedup.byDayPlatformEntry[
+        `${r.event_date}\0${r.platform}\0${r.entry_position_bucket}`
+      ] || 0;
       m.upload_success_count += n(r.upload_success_count);
       m.ai_identify_start_count += n(r.ai_identify_start_count);
       m.ai_identify_result_count += n(r.ai_identify_result_count);
@@ -341,7 +622,13 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
   let aif = 0;
 
   for (const r of effectiveRows) {
-    uc += n(r.upload_click_count);
+    if (filter.entry_position) {
+      uc += clickDedup.byDayPlatformEntry[
+        `${r.event_date}\0${r.platform}\0${r.entry_position_bucket}`
+      ] || 0;
+    } else {
+      uc += clickDedup.byDayPlatform[`${r.event_date}\0${r.platform}`] || 0;
+    }
     us += n(r.upload_success_count);
     ais += n(r.ai_identify_start_count);
     air += n(r.ai_identify_result_count);
@@ -360,6 +647,7 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
     summary: {
       upload_click_count: uc,
       upload_success_count: us,
+      upload_success_rate: uc === 0 ? 0 : us / uc,
       upload_conversion_rate: uc === 0 ? 0 : us / uc,
       funnel: {
         upload_click: uc,
@@ -375,10 +663,19 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
       event_date: r.event_date,
       platform: r.platform,
       entry_position_bucket: r.entry_position_bucket,
-      upload_click_count: n(r.upload_click_count),
+      upload_click_count: filter.entry_position
+        ? clickDedup.byDayPlatformEntry[`${r.event_date}\0${r.platform}\0${r.entry_position_bucket}`] || 0
+        : clickDedup.byDayPlatform[`${r.event_date}\0${r.platform}`] || 0,
       upload_success_count: n(r.upload_success_count),
       upload_conversion_rate:
-        n(r.upload_click_count) === 0 ? 0 : n(r.upload_success_count) / n(r.upload_click_count),
+        (filter.entry_position
+          ? clickDedup.byDayPlatformEntry[`${r.event_date}\0${r.platform}\0${r.entry_position_bucket}`] || 0
+          : clickDedup.byDayPlatform[`${r.event_date}\0${r.platform}`] || 0) === 0
+          ? 0
+          : n(r.upload_success_count) /
+            (filter.entry_position
+              ? clickDedup.byDayPlatformEntry[`${r.event_date}\0${r.platform}\0${r.entry_position_bucket}`] || 0
+              : clickDedup.byDayPlatform[`${r.event_date}\0${r.platform}`] || 0),
       ai_identify_start_count: n(r.ai_identify_start_count),
       ai_identify_result_count: n(r.ai_identify_result_count),
       ai_identify_fail_count: n(r.ai_identify_fail_count),
@@ -400,15 +697,10 @@ async function fetchAiIdentifyAggregate(supabaseAdmin, filter) {
   if (error) throw new Error(error.message || String(error));
   const list = rows || [];
 
-  let starts = 0;
-  let results = 0;
-  let fails = 0;
-
-  for (const r of list) {
-    starts += n(r.identify_start_count);
-    results += n(r.identify_result_count);
-    fails += n(r.identify_fail_count);
-  }
+  const aiDedup = await computeAiDedupRequestMetrics(supabaseAdmin, filter);
+  const starts = n(aiDedup.start_count);
+  const results = n(aiDedup.success_count);
+  const fails = n(aiDedup.fail_count);
 
   // 中文注释：整窗 dedup 必须 count(distinct request_id)，禁止对 daily 的 dedup_request_count 求和。
   const { data: dedupRaw, error: dedupErr } = await supabaseAdmin.rpc(
@@ -434,7 +726,7 @@ async function fetchAiIdentifyAggregate(supabaseAdmin, filter) {
       identify_start_count: starts,
       identify_result_count: results,
       identify_fail_count: fails,
-      dedup_request_count: n(dedupRaw),
+      dedup_request_count: n(dedupRaw) || starts,
       identify_success_rate: starts === 0 ? 0 : results / starts,
       identify_fail_rate: starts === 0 ? 0 : fails / starts,
       ...aiFlatExtras,
@@ -442,9 +734,10 @@ async function fetchAiIdentifyAggregate(supabaseAdmin, filter) {
     daily: list.map((r) => ({
       event_date: r.event_date,
       platform: r.platform,
-      identify_start_count: n(r.identify_start_count),
-      identify_result_count: n(r.identify_result_count),
-      identify_fail_count: n(r.identify_fail_count),
+      identify_start_count: aiDedup.startDaily[`${r.event_date}\0${r.platform}`] || 0,
+      identify_result_count:
+        aiDedup.successDaily[`${r.event_date}\0${r.platform}`] || 0,
+      identify_fail_count: aiDedup.failDaily[`${r.event_date}\0${r.platform}`] || 0,
       // 中文注释：按日+平台维度的 dedup，仅用于趋势/分面；整窗 KPI 请用 summary.dedup_request_count。
       dedup_request_count: n(r.dedup_request_count),
       identify_latency_p50_ms: r.identify_latency_p50_ms != null ? n(r.identify_latency_p50_ms) : null,
@@ -467,10 +760,8 @@ async function fetchCollectionGrowthAggregate(supabaseAdmin, filter) {
   if (error) throw new Error(error.message || String(error));
   const list = rows || [];
 
-  let unlocks = 0;
-  for (const r of list) {
-    unlocks += n(r.species_unlock_count);
-  }
+  const collectionExtras = await computeCollectionFlatExtras(supabaseAdmin, filter);
+  let unlocks = n(collectionExtras.species_unlock_count);
 
   // 中文注释：整窗 UV 必须 count(distinct identity_key) 跨日一次算清，禁止对 daily 的 UV 列求和。
   const { data: uvPayload, error: uvErr } = await supabaseAdmin.rpc(
@@ -498,8 +789,11 @@ async function fetchCollectionGrowthAggregate(supabaseAdmin, filter) {
   return {
     summary: {
       species_unlock_count: unlocks,
+      species_unlock_user_uv: n(collectionExtras.species_unlock_user_uv),
       collection_view_uv: n(uvObj.collection_view_uv),
       species_detail_view_uv: n(uvObj.species_detail_view_uv),
+      collection_view_count: n(collectionExtras.collection_view_count),
+      species_detail_view_count: n(collectionExtras.species_detail_view_count),
     },
     daily: list.map((r) => ({
       event_date: r.event_date,
