@@ -88,7 +88,7 @@ const ANALYTICS_DASHBOARD_CONTRACT = {
     shared_filters: {
       time_range: {
         type: 'enum',
-        options: ['today', '7d', '30d', 'custom'],
+        options: ['today', '7d', '14d', '30d', 'custom'],
         default: '7d',
       },
       platform: {
@@ -109,7 +109,7 @@ const ANALYTICS_DASHBOARD_CONTRACT = {
       timezone: 'UTC',
     },
   },
-  time_range_options: ['today', '7d', '30d', 'custom'],
+  time_range_options: ['today', '7d', '14d', '30d', 'custom'],
 
   // 1.1 + 1.2: 按 Dashboard 分组事件与指标依赖
   dashboards: {

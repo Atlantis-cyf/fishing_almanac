@@ -5,7 +5,7 @@
  * 后续聚合接口只消费 parseAdminAnalyticsQuery 的返回值即可。
  */
 
-const ALLOWED_TIME_RANGES = new Set(['today', '7d', '30d', 'custom']);
+const ALLOWED_TIME_RANGES = new Set(['today', '7d', '14d', '30d', 'custom']);
 
 /**
  * 取当前时刻的 UTC 日历「日」零点。
@@ -65,7 +65,7 @@ function parseIsoDate(raw) {
  * 从 Express req.query 解析管理员 Analytics 筛选条件。
  *
  * Query 约定：
- * - time_range: today | 7d | 30d | custom（缺省按合同默认 7d）
+ * - time_range: today | 7d | 14d | 30d | custom（缺省按合同默认 7d）
  * - platform: 可选，空字符串视为未筛选
  * - entry_position: 可选，仅 Upload 漏斗使用
  * - from / to: 当 time_range=custom 时必填，ISO-8601（建议带 Z 的 UTC）
@@ -121,6 +121,12 @@ function parseAdminAnalyticsQuery(query, opts = {}) {
   } else if (rawRange === '7d') {
     // 中文注释：含今天共 7 个 UTC 日历日（与 event_date 按天对齐时常用口径）
     const fromDay = addUtcDays(todayStart, -6);
+    occurred_at_from = startOfUtcDay(fromDay);
+    occurred_at_to = todayEnd;
+    utc_date_from = toUtcDateString(fromDay);
+    utc_date_to = toUtcDateString(todayStart);
+  } else if (rawRange === '14d') {
+    const fromDay = addUtcDays(todayStart, -13);
     occurred_at_from = startOfUtcDay(fromDay);
     occurred_at_to = todayEnd;
     utc_date_from = toUtcDateString(fromDay);

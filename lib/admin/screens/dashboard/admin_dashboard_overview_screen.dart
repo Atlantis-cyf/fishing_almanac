@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_analytics_tab_body.dart';
+import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_dashboard_layouts.dart';
 import 'package:fishing_almanac/api/api_config.dart';
 
 /// 数据看板 — 概览 Tab。
@@ -12,6 +13,7 @@ class AdminDashboardOverviewScreen extends StatelessWidget {
     return const AdminAnalyticsTabBody(
       endpoint: AdminAnalyticsEndpoints.overview,
       showEntryPosition: false,
+      mode: AnalyticsDashboardMode.overview,
     );
   }
 }

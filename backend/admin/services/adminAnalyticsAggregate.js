@@ -27,6 +27,148 @@ function nRate(v) {
   return Number.isFinite(x) ? x : 0;
 }
 
+const FLAT_PAGE_SIZE = 1000;
+const FLAT_MAX_ROWS = 50000;
+
+/**
+ * 分页拉平 analytics_event_flat_v / analytics_events，在管理端数据量下做补充聚合。
+ * 中文注释：超过 FLAT_MAX_ROWS 会截断，避免极端情况下 OOM。
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {() => import('@supabase/supabase-js').PostgrestFilterBuilder} buildQuery
+ */
+async function fetchAllPaged(supabaseAdmin, buildQuery) {
+  let from = 0;
+  /** @type {Record<string, unknown>[]} */
+  const out = [];
+  for (;;) {
+    const q = buildQuery().range(from, from + FLAT_PAGE_SIZE - 1);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message || String(error));
+    const rows = data || [];
+    out.push(...rows);
+    if (rows.length < FLAT_PAGE_SIZE) break;
+    from += FLAT_PAGE_SIZE;
+    if (from >= FLAT_MAX_ROWS) break;
+  }
+  return out;
+}
+
+/**
+ * 上传成功：平均耗时、成功人数（identity 去重）；上传点击人数。
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {{ utc_date_from: string, utc_date_to: string, platform: string | null, entry_position: string | null }} filter
+ */
+async function computeUploadFlatExtras(supabaseAdmin, filter) {
+  const successRows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('upload_duration_ms, identity_key')
+      .eq('event_type', 'upload_success')
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to);
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    if (filter.entry_position) q = q.eq('entry_position', filter.entry_position);
+    return q;
+  });
+  const durs = [];
+  const succUv = new Set();
+  for (const r of successRows) {
+    if (r.identity_key) succUv.add(String(r.identity_key));
+    const ms = n(r.upload_duration_ms);
+    if (ms > 0) durs.push(ms);
+  }
+  const clickRows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('identity_key')
+      .eq('event_type', 'upload_click')
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to);
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    if (filter.entry_position) q = q.eq('entry_position', filter.entry_position);
+    return q;
+  });
+  const clickUv = new Set();
+  for (const r of clickRows) {
+    if (r.identity_key) clickUv.add(String(r.identity_key));
+  }
+  return {
+    upload_success_uv: succUv.size,
+    upload_click_uv: clickUv.size,
+    upload_avg_duration_ms: durs.length === 0 ? null : durs.reduce((a, b) => a + b, 0) / durs.length,
+  };
+}
+
+/**
+ * AI：失败原因分布、平均延迟（result+fail）、平均 confidence（读原始 properties）。
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabaseAdmin
+ * @param {{ utc_date_from: string, utc_date_to: string, platform: string | null, occurred_at_from: string, occurred_at_to: string }} filter
+ */
+async function computeAiFlatExtras(supabaseAdmin, filter) {
+  const failRows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('error_code')
+      .eq('event_type', 'ai_identify_fail')
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to);
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    return q;
+  });
+  /** @type {Record<string, number>} */
+  const fail_reason_breakdown = {};
+  for (const r of failRows) {
+    const c =
+      r.error_code != null && String(r.error_code).trim() !== ''
+        ? String(r.error_code)
+        : 'unknown';
+    fail_reason_breakdown[c] = (fail_reason_breakdown[c] || 0) + 1;
+  }
+
+  const latRows = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_event_flat_v')
+      .select('latency_ms')
+      .in('event_type', ['ai_identify_result', 'ai_identify_fail'])
+      .gte('event_date', filter.utc_date_from)
+      .lte('event_date', filter.utc_date_to)
+      .not('latency_ms', 'is', null);
+    if (filter.platform) q = q.eq('platform', filter.platform);
+    return q;
+  });
+  const lats = latRows.map((r) => n(r.latency_ms)).filter((x) => x > 0);
+  const identify_latency_avg_ms = lats.length === 0 ? null : lats.reduce((a, b) => a + b, 0) / lats.length;
+
+  const resultEvents = await fetchAllPaged(supabaseAdmin, () => {
+    let q = supabaseAdmin
+      .from('analytics_events')
+      .select('properties')
+      .eq('event_type', 'ai_identify_result')
+      .gte('occurred_at', filter.occurred_at_from)
+      .lte('occurred_at', filter.occurred_at_to);
+    return q;
+  });
+  const confVals = [];
+  for (const r of resultEvents) {
+    const props = r.properties && typeof r.properties === 'object' ? r.properties : {};
+    if (filter.platform) {
+      const pl = props.platform != null ? String(props.platform) : '';
+      if (pl !== filter.platform) continue;
+    }
+    const raw = props.confidence;
+    if (raw == null) continue;
+    const x = Number(raw);
+    if (Number.isFinite(x)) confVals.push(x);
+  }
+  const identify_confidence_avg = confVals.length === 0 ? null : confVals.reduce((a, b) => a + b, 0) / confVals.length;
+
+  return {
+    fail_reason_breakdown,
+    identify_latency_avg_ms,
+    identify_confidence_avg,
+  };
+}
+
 /**
  * 在链式查询上追加 event_date 闭区间与可选 platform 条件。
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase
@@ -145,6 +287,15 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
   if (error) throw new Error(error.message || String(error));
   const list = rows || [];
 
+  /** @type {Record<string, number>} */
+  const entry_position_click_mix = {};
+  for (const r of list) {
+    const b = r.entry_position_bucket;
+    if (b == null || b === '__rollup__' || b === '__all__') continue;
+    const k = String(b);
+    entry_position_click_mix[k] = (entry_position_click_mix[k] || 0) + n(r.upload_click_count);
+  }
+
   /** @type {typeof list} */
   let effectiveRows = list;
 
@@ -197,6 +348,14 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
     aif += n(r.ai_identify_fail_count);
   }
 
+  /** @type {Record<string, unknown>} */
+  let uploadFlatExtras = {};
+  try {
+    uploadFlatExtras = await computeUploadFlatExtras(supabaseAdmin, filter);
+  } catch (e) {
+    console.warn('[adminAnalytics] upload flat extras failed', e?.message || e);
+  }
+
   return {
     summary: {
       upload_click_count: uc,
@@ -209,6 +368,8 @@ async function fetchUploadFunnelAggregate(supabaseAdmin, filter) {
       },
       identify_success_rate: ais === 0 ? 0 : air / ais,
       identify_fail_rate: ais === 0 ? 0 : aif / ais,
+      entry_position_click_mix,
+      ...uploadFlatExtras,
     },
     daily: effectiveRows.map((r) => ({
       event_date: r.event_date,
@@ -260,6 +421,14 @@ async function fetchAiIdentifyAggregate(supabaseAdmin, filter) {
   );
   if (dedupErr) throw new Error(dedupErr.message || String(dedupErr));
 
+  /** @type {Record<string, unknown>} */
+  let aiFlatExtras = {};
+  try {
+    aiFlatExtras = await computeAiFlatExtras(supabaseAdmin, filter);
+  } catch (e) {
+    console.warn('[adminAnalytics] ai flat extras failed', e?.message || e);
+  }
+
   return {
     summary: {
       identify_start_count: starts,
@@ -268,6 +437,7 @@ async function fetchAiIdentifyAggregate(supabaseAdmin, filter) {
       dedup_request_count: n(dedupRaw),
       identify_success_rate: starts === 0 ? 0 : results / starts,
       identify_fail_rate: starts === 0 ? 0 : fails / starts,
+      ...aiFlatExtras,
     },
     daily: list.map((r) => ({
       event_date: r.event_date,

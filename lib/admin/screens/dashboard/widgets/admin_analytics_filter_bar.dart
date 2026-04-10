@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
 import 'package:fishing_almanac/theme/app_font.dart';
 
-/// 与后端 [parseAdminAnalyticsQuery] 对齐的筛选条（方案 1：仅存 State，不写 URL）。
+/// 与后端 parseAdminAnalyticsQuery 对齐的筛选条。
 class AdminAnalyticsFilterBar extends StatelessWidget {
   const AdminAnalyticsFilterBar({
     super.key,
@@ -24,7 +24,7 @@ class AdminAnalyticsFilterBar extends StatelessWidget {
   final TextEditingController? customFromController;
   final TextEditingController? customToController;
 
-  static const timeOptions = ['today', '7d', '30d', 'custom'];
+  static const timeOptions = ['today', '7d', '14d', '30d', 'custom'];
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +53,7 @@ class AdminAnalyticsFilterBar extends StatelessWidget {
                   items: const [
                     DropdownMenuItem(value: 'today', child: Text('今天')),
                     DropdownMenuItem(value: '7d', child: Text('近 7 天')),
+                    DropdownMenuItem(value: '14d', child: Text('近 14 天')),
                     DropdownMenuItem(value: '30d', child: Text('近 30 天')),
                     DropdownMenuItem(value: 'custom', child: Text('自定义')),
                   ],

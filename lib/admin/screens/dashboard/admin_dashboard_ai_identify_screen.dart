@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_analytics_tab_body.dart';
+import 'package:fishing_almanac/admin/screens/dashboard/widgets/admin_dashboard_layouts.dart';
 import 'package:fishing_almanac/api/api_config.dart';
 
 /// 数据看板 — AI 识别 Tab（整窗 dedup 见 summary.dedup_request_count）。
@@ -12,6 +13,7 @@ class AdminDashboardAiIdentifyScreen extends StatelessWidget {
     return const AdminAnalyticsTabBody(
       endpoint: AdminAnalyticsEndpoints.aiIdentify,
       showEntryPosition: false,
+      mode: AnalyticsDashboardMode.aiIdentify,
     );
   }
 }
