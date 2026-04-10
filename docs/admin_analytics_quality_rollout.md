@@ -100,4 +100,5 @@
 
 - 合同与 Phase1/2 验收：`docs/admin_dashboard_contract_phase1_acceptance.md`、`docs/admin_dashboard_contract_phase2_acceptance.md`。  
 - 埋点事件定义：`docs/analytics_implementation.md`。  
+- 看板指标计算口径：`docs/admin_analytics_metric_definitions.md`。  
 - 本文件：**上线前风险、开关、分阶段验收** 的单一入口，随版本迭代增补行即可。

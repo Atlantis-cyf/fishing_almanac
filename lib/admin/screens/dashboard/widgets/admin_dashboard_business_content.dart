@@ -7,6 +7,12 @@ import 'package:fishing_almanac/theme/app_colors.dart';
 
 String _fmtInt(num v) =>
     v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(2);
+String _fmtPerUser(num numerator, num denominator) {
+  if (denominator <= 0) {
+    return '-';
+  }
+  return (numerator / denominator).toStringAsFixed(2);
+}
 String _fmtRate(num v) => (v <= 1 && v >= 0)
     ? '${(v * 100).toStringAsFixed(1)}%'
     : '${v.toStringAsFixed(1)}%';
@@ -88,6 +94,9 @@ class AdminDashboardBusinessContent extends StatelessWidget {
     ov['species_unlock_user_uv'] = readSummaryNum(co, 'species_unlock_user_uv');
     ov['species_unlock_count'] = readSummaryNum(co, 'species_unlock_count');
     ov['collection_view_uv'] = readSummaryNum(co, 'collection_view_uv');
+    final dau = readSummaryNum(ov, 'active_users_uv');
+    final unlockCount = readSummaryNum(ov, 'species_unlock_count');
+    final unlocksPerDau = _fmtPerUser(unlockCount, dau);
 
     final dailyRows = _sumDailyByDate(daily);
     final unlockRows = _sumDailyByDate(
@@ -118,7 +127,7 @@ class AdminDashboardBusinessContent extends StatelessWidget {
           card(AdminKpiCard(label: '上传成功用户数', value: _fmtInt(readSummaryNum(ov, 'upload_success_uv')))),
           card(AdminKpiCard(label: 'AI识别成功用户数', value: _fmtInt(readSummaryNum(ov, 'ai_identify_success_uv')))),
           card(AdminKpiCard(label: '新增解锁用户数', value: _fmtInt(readSummaryNum(ov, 'species_unlock_user_uv')))),
-          card(AdminKpiCard(label: '新增解锁次数', value: _fmtInt(readSummaryNum(ov, 'species_unlock_count')))),
+          card(AdminKpiCard(label: '每活跃用户新增解锁数', value: unlocksPerDau)),
           card(AdminKpiCard(label: '图鉴访问用户数', value: _fmtInt(readSummaryNum(ov, 'collection_view_uv')))),
           card(AdminKpiCard(label: '识别成功率', value: _fmtRate(readSummaryNum(ov, 'identify_success_rate')))),
         ]),
@@ -300,6 +309,12 @@ class AdminDashboardBusinessContent extends StatelessWidget {
     final detailCount = readSummaryNum(s, 'species_detail_view_count');
     final unlockUv = readSummaryNum(s, 'species_unlock_user_uv');
     final unlockCount = readSummaryNum(s, 'species_unlock_count');
+    final overviewSummary = extraSummaries.values.firstWhere(
+      (x) => x?['active_users_uv'] != null,
+      orElse: () => const {},
+    );
+    final dau = readSummaryNum(overviewSummary, 'active_users_uv');
+    final unlocksPerDau = _fmtPerUser(unlockCount, dau);
 
     final cards = <Widget>[
       card(AdminKpiCard(label: '图鉴访问用户数', value: _fmtInt(colUv))),
@@ -313,7 +328,7 @@ class AdminDashboardBusinessContent extends StatelessWidget {
         card(AdminKpiCard(
             label: '人均详情查看次数', value: (detailCount / detailUv).toStringAsFixed(2))),
       card(AdminKpiCard(label: '新增解锁用户数', value: _fmtInt(unlockUv))),
-      card(AdminKpiCard(label: '新增解锁次数', value: _fmtInt(unlockCount))),
+      card(AdminKpiCard(label: '每活跃用户新增解锁数', value: unlocksPerDau)),
     ];
 
     return ListView(
