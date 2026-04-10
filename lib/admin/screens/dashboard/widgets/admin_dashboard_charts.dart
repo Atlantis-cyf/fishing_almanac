@@ -76,8 +76,9 @@ class AdminSparklineCard extends StatelessWidget {
                 interval: values.length > 7 ? 2 : 1,
                 getTitlesWidget: (v, _) {
                   final i = v.round();
-                  if (i < 0 || i >= values.length)
+                  if (i < 0 || i >= values.length) {
                     return const SizedBox.shrink();
+                  }
                   return Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(

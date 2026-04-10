@@ -251,9 +251,9 @@ class AdminDashboardBusinessContent extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: chips.isEmpty
-              ? Card(
+              ? const Card(
                   color: AppColors.surfaceContainerLow,
-                  child: const Padding(
+                  child: Padding(
                     padding: EdgeInsets.all(16),
                     child: Text('暂无失败样本'),
                   ),
