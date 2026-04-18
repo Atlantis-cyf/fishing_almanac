@@ -141,6 +141,12 @@ class LocalCatchRepository extends CatchRepository {
   }
 
   @override
+  Future<List<CatchFeedItem>> allHomeItems() async {
+    await _ensureLoaded();
+    return CatchFeedData.timelineHomeFromPublished(_items);
+  }
+
+  @override
   Future<CatchFeedPage> timelineForSpecies(
     String speciesScientificName, {
     CatchTimelineCursor? cursor,

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fishing_almanac/api/api_client.dart';
 import 'package:fishing_almanac/api/api_config.dart';
@@ -12,6 +14,7 @@ import 'package:fishing_almanac/api/dto/catch_record_dto.dart';
 import 'package:fishing_almanac/api/mappers/catch_record_mapper.dart';
 import 'package:fishing_almanac/auth/auth_session.dart';
 import 'package:fishing_almanac/models/catch_feed_item.dart';
+import 'package:fishing_almanac/models/catch_review_status.dart';
 import 'package:fishing_almanac/models/published_catch.dart';
 import 'package:fishing_almanac/repositories/catch_feed_page.dart';
 import 'package:fishing_almanac/repositories/catch_repository.dart';
@@ -146,6 +149,89 @@ class RemoteCatchRepository extends CatchRepository {
   Future<List<CatchFeedItem>> userPhotosForSpecies(String speciesScientificName) async {
     final page = await timelineForSpecies(speciesScientificName);
     return page.items;
+  }
+
+  // ---- 本地缓存（SharedPreferences）：首页宫格全量数据 ----
+  static const _homeLocalCacheKey = 'remote_home_cache_v1';
+
+  static Map<String, dynamic> _itemToMap(CatchFeedItem item) => {
+        'id': item.id,
+        'sn': item.scientificName,
+        'n': item.notes,
+        'w': item.weightKg,
+        'l': item.lengthCm,
+        'loc': item.locationLabel,
+        'lat': item.lat,
+        'lng': item.lng,
+        'at': item.occurredAt.millisecondsSinceEpoch,
+        'url': item.imageUrl,
+        'pub': item.fromPublished,
+        'spid': item.sourcePublishedId,
+        'rs': item.reviewStatus.wireValue,
+      };
+
+  static CatchFeedItem _itemFromMap(Map<String, dynamic> m) => CatchFeedItem(
+        id: m['id'] as String? ?? '',
+        scientificName: m['sn'] as String? ?? '',
+        notes: m['n'] as String? ?? '',
+        weightKg: (m['w'] as num?)?.toDouble() ?? 0,
+        lengthCm: (m['l'] as num?)?.toDouble() ?? 0,
+        locationLabel: m['loc'] as String? ?? '',
+        lat: (m['lat'] as num?)?.toDouble(),
+        lng: (m['lng'] as num?)?.toDouble(),
+        occurredAt: DateTime.fromMillisecondsSinceEpoch(
+          m['at'] as int? ?? 0,
+          isUtc: true,
+        ),
+        imageUrl: m['url'] as String? ?? '',
+        fromPublished: m['pub'] as bool? ?? true,
+        sourcePublishedId: m['spid'] as String?,
+        reviewStatus: parseCatchReviewStatusLocal(m['rs']),
+      );
+
+  Future<void> _saveHomeCache(List<CatchFeedItem> items) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _homeLocalCacheKey,
+        jsonEncode(items.map(_itemToMap).toList()),
+      );
+    } catch (e) {
+      debugPrint('RemoteCatchRepository: home cache save failed: $e');
+    }
+  }
+
+  Future<List<CatchFeedItem>> _loadHomeCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_homeLocalCacheKey);
+      if (raw == null || raw.isEmpty) return [];
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .whereType<Map>()
+          .map((e) => _itemFromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      debugPrint('RemoteCatchRepository: home cache load failed: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<List<CatchFeedItem>> allHomeItems() async {
+    if (!_auth.isReady || !_auth.isLoggedIn) {
+      return _loadHomeCache();
+    }
+    final all = <CatchFeedItem>[];
+    CatchTimelineCursor? cursor;
+    while (true) {
+      final page = await _fetch(scientificName: null, speciesId: null, cursor: cursor);
+      all.addAll(page.items);
+      if (!page.hasMore || page.nextCursor == null) break;
+      cursor = page.nextCursor;
+    }
+    unawaited(_saveHomeCache(all));
+    return all;
   }
 
   @override

@@ -23,6 +23,9 @@ abstract class CatchRepository extends ChangeNotifier {
 
   Future<CatchFeedPage> timelineHome({CatchTimelineCursor? cursor});
 
+  /// 首页宫格专用：返回当前用户**全部**鱼获（无分页上限），并在本地缓存以供离线浏览。
+  Future<List<CatchFeedItem>> allHomeItems();
+
   Future<CatchFeedPage> timelineForSpecies(
     String speciesScientificName, {
     CatchTimelineCursor? cursor,

@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
     context.watch<SpeciesCatalogService>();
     if (repo.dataGeneration != _lastGen) {
       _lastGen = repo.dataGeneration;
-      _timelineFuture = repo.timelineHome().then((p) => p.items);
+      _timelineFuture = repo.allHomeItems();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
         final msg = context.read<CatchRepository>().consumePersistenceHint();
