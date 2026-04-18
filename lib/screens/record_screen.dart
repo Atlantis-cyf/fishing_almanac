@@ -175,6 +175,22 @@ class _RecordScreenState extends State<RecordScreen> {
                                           ),
                                         ),
                                         Positioned(
+                                          left: 12,
+                                          bottom: 12,
+                                          child: Material(
+                                            color: AppColors.primaryContainer,
+                                            shape: const CircleBorder(),
+                                            child: InkWell(
+                                              customBorder: const CircleBorder(),
+                                              onTap: _pickPhoto,
+                                              child: const Padding(
+                                                padding: EdgeInsets.all(10),
+                                                child: Icon(Icons.photo_library_outlined, size: 20, color: AppColors.onPrimaryContainer),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
                                           right: 12,
                                           bottom: 12,
                                           child: Material(
@@ -185,7 +201,7 @@ class _RecordScreenState extends State<RecordScreen> {
                                               onTap: () => _openAdjustPhoto(draft),
                                               child: const Padding(
                                                 padding: EdgeInsets.all(10),
-                                                child: Icon(Icons.edit, size: 20, color: AppColors.onPrimaryContainer),
+                                                child: Icon(Icons.crop_rotate, size: 20, color: AppColors.onPrimaryContainer),
                                               ),
                                             ),
                                           ),
