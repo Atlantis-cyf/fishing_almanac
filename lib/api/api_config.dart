@@ -200,8 +200,11 @@ abstract final class AdminSpeciesEndpoints {
     defaultValue: '/v1/admin/species/audit-logs',
   );
 
+  static const String headFocusBatch = '/v1/admin/species/head-focus-batch';
+
   static String detail(int id) => '$list/$id';
   static String image(int id) => '$list/$id/image';
+  static String headFocus(int id) => '$list/$id/head-focus';
   static String aliases(int id) => '$list/$id/aliases';
   static String replaceAliases(int id) => '$list/$id/aliases/replace';
   static String aliasById(int id, int aliasId) => '$list/$id/aliases/$aliasId';

@@ -24,6 +24,7 @@ class _AdminSpeciesScreenState extends State<AdminSpeciesScreen> {
 
   bool _loading = true;
   bool _refreshing = false;
+  bool _headFocusBusy = false;
   String? _error;
   List<_AdminSpeciesItem> _species = const [];
 
@@ -227,6 +228,80 @@ class _AdminSpeciesScreenState extends State<AdminSpeciesScreen> {
     await showDialog<void>(context: context, builder: (ctx) => const _AuditLogsDialog());
   }
 
+  Future<void> _openHeadFocusBatchDialog() async {
+    bool force = false;
+    final limitCtrl = TextEditingController(text: '50');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('批量识别鱼头位置'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('对物种图片调用 AI 检测鱼头坐标，写入数据库。'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: limitCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: '每次处理上限（条数）',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                value: force,
+                onChanged: (v) => setS(() => force = v ?? false),
+                title: const Text('强制重新检测（覆盖已有坐标）'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('开始')),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final limit = int.tryParse(limitCtrl.text.trim()) ?? 50;
+    setState(() => _headFocusBusy = true);
+    try {
+      final api = context.read<ApiClient>();
+      final res = await api.post<dynamic>(
+        AdminSpeciesEndpoints.headFocusBatch,
+        data: {'force': force, 'limit': limit},
+      );
+      final body = res.data as Map<String, dynamic>? ?? {};
+      final processed = body['processed'] ?? 0;
+      final failed = body['failed'] ?? 0;
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('批量识别完成'),
+          content: Text('成功处理：$processed 条\n失败：$failed 条'),
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('确定'))],
+        ),
+      );
+      _fetchSpecies(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('批量识别失败：$e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _headFocusBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final target = _byId(_targetId);
@@ -249,6 +324,17 @@ class _AdminSpeciesScreenState extends State<AdminSpeciesScreen> {
             onPressed: () => context.go('/admin-dashboard/overview'),
             icon: const Icon(Icons.insights_outlined),
             tooltip: '数据看板',
+          ),
+          IconButton(
+            onPressed: _headFocusBusy ? null : _openHeadFocusBatchDialog,
+            icon: _headFocusBusy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.center_focus_strong_outlined),
+            tooltip: '批量识别鱼头位置',
           ),
           IconButton(
             onPressed: _refreshing ? null : () => _fetchSpecies(silent: true),

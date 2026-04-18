@@ -7,6 +7,7 @@ function registerAdminSpeciesRoutes({
   logSpeciesAdminAction,
   toFiniteNumberOr,
   uploadSpeciesImage,
+  analyzeSpeciesImageHeadFocus,
 }) {
   app.get('/v1/admin/species', async (req, res) => {
     const user = await requireAdmin(req, res);
@@ -15,7 +16,7 @@ function registerAdminSpeciesRoutes({
       const statusFilter = String(req.query.status || 'all');
       let query = supabaseAdmin
         .from('species_catalog')
-        .select('id, species_zh, scientific_name, taxonomy_zh, is_rare, image_url, max_length_m, max_weight_kg, description_zh, name_en, encyclopedia_category, rarity_display, alias_zh, source, status, contributed_by, contributed_image_url, merged_into_species_id, merged_at, merge_note, created_at')
+        .select('id, species_zh, scientific_name, taxonomy_zh, is_rare, image_url, image_head_nx, image_head_ny, max_length_m, max_weight_kg, description_zh, name_en, encyclopedia_category, rarity_display, alias_zh, source, status, contributed_by, contributed_image_url, merged_into_species_id, merged_at, merge_note, created_at')
         .order('id', { ascending: true });
       if (statusFilter !== 'all') query = query.eq('status', statusFilter);
       const { data, error } = await query;
@@ -203,6 +204,16 @@ function registerAdminSpeciesRoutes({
         afterData: { image_url: updated.image_url },
       });
 
+      // Fire-and-forget: detect fish head position for the new image
+      analyzeSpeciesImageHeadFocus(imageUrl)
+        .then(({ nx, ny }) =>
+          supabaseAdmin
+            .from('species_catalog')
+            .update({ image_head_nx: nx, image_head_ny: ny })
+            .eq('id', id)
+        )
+        .catch(e => console.error(`[head-focus] auto-detect failed for species ${id}:`, e));
+
       return res.json({ species: updated });
     } catch (e) {
       return jsonError(res, 500, '更新物种图片失败', String(e?.message || e));
@@ -340,6 +351,131 @@ function registerAdminSpeciesRoutes({
       return res.json({ ok: true });
     } catch (e) {
       return jsonError(res, 500, '删除俗名失败', String(e?.message || e));
+    }
+  });
+
+  // 批量：在已部署 BFF 上跑，无需本机 PowerShell（单次条数默认较小，避免托管平台超时）
+  app.post('/v1/admin/species/head-focus-batch', async (req, res) => {
+    const user = await requireAdmin(req, res);
+    if (!user) return;
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const force = body.force === true || body.force === 'true';
+    let limit = Number(body.limit);
+    if (!Number.isFinite(limit) || limit < 1) limit = 12;
+    limit = Math.min(25, Math.floor(limit));
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    try {
+      let q = supabaseAdmin
+        .from('species_catalog')
+        .select('id, image_url, image_head_nx')
+        .order('id', { ascending: true });
+      if (!force) q = q.is('image_head_nx', null);
+
+      const { data: rows, error: qErr } = await q;
+      if (qErr) return jsonError(res, 500, '查询物种失败', String(qErr.message || qErr));
+
+      const list = (rows || []).filter((r) => {
+        const u = String(r.image_url || '').trim();
+        if (!u || u.includes('placeholder')) return false;
+        return (
+          u.startsWith('http://') ||
+          u.startsWith('https://') ||
+          u.startsWith('assets/species/')
+        );
+      });
+
+      const todo = list.slice(0, limit);
+      const results = [];
+
+      for (const row of todo) {
+        const id = row.id;
+        const imageUrl = String(row.image_url).trim();
+        try {
+          const { nx, ny, engine } = await analyzeSpeciesImageHeadFocus(imageUrl);
+          const { error: upErr } = await supabaseAdmin
+            .from('species_catalog')
+            .update({ image_head_nx: nx, image_head_ny: ny })
+            .eq('id', id);
+          if (upErr) throw new Error(upErr.message);
+          results.push({ id, ok: true, engine, head: { nx, ny } });
+        } catch (e) {
+          results.push({ id, ok: false, error: String(e.message || e) });
+        }
+        await sleep(550);
+      }
+
+      await logSpeciesAdminAction({
+        actorUserId: user.id,
+        action: 'batch_species_head_focus',
+        speciesId: null,
+        afterData: { limit, force, processed: results.length, ok: results.filter((r) => r.ok).length },
+      });
+
+      return res.json({
+        eligible_total: list.length,
+        batch_size: todo.length,
+        limit_requested: limit,
+        force,
+        results,
+      });
+    } catch (e) {
+      console.error('[admin/head-focus-batch]', e);
+      return jsonError(res, 500, '批量分析失败', String(e?.message || e));
+    }
+  });
+
+  // AI 估算鱼头归一化坐标（Gemini 优先，失败则豆包），写回 image_head_nx / image_head_ny
+  app.post('/v1/admin/species/:id/head-focus', async (req, res) => {
+    const user = await requireAdmin(req, res);
+    if (!user) return;
+
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return jsonError(res, 400, '无效的物种 id');
+
+    try {
+      const { data: row, error: selErr } = await supabaseAdmin
+        .from('species_catalog')
+        .select('id, image_url, image_head_nx, image_head_ny')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (selErr) return jsonError(res, 500, '读取物种失败', String(selErr.message || selErr));
+      if (!row) return jsonError(res, 404, '物种不存在');
+
+      const imageUrl = String(row.image_url || '').trim();
+      if (!imageUrl) {
+        return jsonError(res, 400, '该物种缺少 image_url');
+      }
+
+      const { nx, ny, engine } = await analyzeSpeciesImageHeadFocus(imageUrl);
+
+      const { data: updated, error: upErr } = await supabaseAdmin
+        .from('species_catalog')
+        .update({ image_head_nx: nx, image_head_ny: ny })
+        .eq('id', id)
+        .select('id, image_url, image_head_nx, image_head_ny')
+        .maybeSingle();
+
+      if (upErr) return jsonError(res, 500, '写回头部坐标失败', String(upErr.message || upErr));
+
+      await logSpeciesAdminAction({
+        actorUserId: user.id,
+        action: 'update_species_head_focus',
+        speciesId: id,
+        afterData: { image_head_nx: nx, image_head_ny: ny, engine },
+      });
+
+      return res.json({
+        species: updated,
+        engine,
+        head: { nx, ny },
+      });
+    } catch (e) {
+      console.error('[admin/head-focus]', e);
+      return jsonError(res, 502, 'AI 分析失败', String(e?.message || e));
     }
   });
 }
