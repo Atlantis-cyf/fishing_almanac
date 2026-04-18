@@ -556,6 +556,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       return;
     }
     setState(() => _publishBusy = true);
+    var didNavigate = false;
     try {
       final repo = context.read<CatchRepository>();
       final analytics = context.read<AnalyticsClient>();
@@ -616,33 +617,16 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
 
       if (!mounted) return;
 
+      // 快照所有需要的数据（draft 导航后可能被新流程覆写）
       final editingId = widget.editingPublishedId;
-      PublishedCatch? original;
-      try {
-        if (editingId != null) {
-          original = await repo.getById(editingId);
-        }
-      } on ApiException catch (e) {
-        if (!mounted) return;
-        _showPublishFailure(e);
-        return;
-      } catch (e) {
-        if (!mounted) return;
-        _showPublishFailure(ApiException(message: e.toString()));
-        return;
-      }
-      if (!mounted) return;
-
-      final saved = draft.buildPublishedForSave(original: original);
       final imageBytesForPublish = draft.imageBytes;
       final taxonomyZh = draft.aiTaxonomyZh;
-      final imageAuthorized = draft.imageAuthorized;
+      final imageAuthorized = draft.imageAuthorized ?? false;
       final needSpeciesCatalogCreate = !draft.aiInCatalog &&
           resolvedScientific.isNotEmpty &&
           resolvedScientific != 'Indeterminate' &&
           resolvedScientific != 'Unnamed species' &&
           editingId == null;
-
       final successProps = <String, dynamic>{
         'species_origin': speciesOrigin,
         'ai_success': aiSuccess,
@@ -655,6 +639,8 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       final publishStartedAtMs = DateTime.now().toUtc().millisecondsSinceEpoch;
 
       if (!mounted) return;
+      // 立刻跳转——所有上传工作（含 getById）在后台进行
+      didNavigate = true;
       context.go('/home');
 
       unawaited(_runPublishAfterNavigate(
@@ -662,7 +648,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         api: api,
         analytics: analytics,
         draft: draft,
-        saved: saved,
+        editingId: editingId,
         imageBytesForPublish: imageBytesForPublish,
         updating: editingId != null,
         updateId: editingId,
@@ -677,7 +663,8 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         publishStartedAtMs: publishStartedAtMs,
       ));
     } finally {
-      if (mounted) setState(() => _publishBusy = false);
+      // 只有在导航前出错时才重置按钮；已导航则 widget 销毁会自然清理
+      if (!didNavigate && mounted) setState(() => _publishBusy = false);
     }
   }
 
@@ -686,7 +673,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     required ApiClient api,
     required AnalyticsClient analytics,
     required CatchDraft draft,
-    required PublishedCatch saved,
+    required String? editingId,
     required Uint8List? imageBytesForPublish,
     required bool updating,
     required String? updateId,
@@ -700,6 +687,21 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     required String? uploadFlowGuard,
     required int publishStartedAtMs,
   }) async {
+    // 后台拉取编辑原始记录（已在导航后执行，不阻塞跳转）
+    PublishedCatch? original;
+    if (editingId != null) {
+      try {
+        original = await repo.getById(editingId);
+      } catch (e) {
+        _showPublishFailureFromRoot(
+          ApiException(message: e.toString()),
+          editingPublishedIdForRetry: editingPublishedIdForRetry,
+        );
+        return;
+      }
+    }
+    final saved = draft.buildPublishedForSave(original: original);
+
     try {
       if (needSpeciesCatalogCreate) {
         try {
