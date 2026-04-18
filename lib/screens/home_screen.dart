@@ -94,10 +94,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 pinned: true,
                 backgroundColor: AppColors.slate900.withValues(alpha: 0.6),
                 surfaceTintColor: Colors.transparent,
-                leading: IconButton(
-                  icon: const Icon(Icons.menu, color: AppColors.cyanNav),
-                  onPressed: () {},
-                ),
                 title: Text(
                   '海钓图鉴',
                   style: AppFont.manrope(

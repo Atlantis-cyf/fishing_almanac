@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -24,8 +25,9 @@ import 'package:fishing_almanac/data/species_catalog.dart';
 import 'package:fishing_almanac/router/app_router.dart';
 import 'package:fishing_almanac/state/catch_draft.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:fishing_almanac/theme/catch_ui_constants.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
+import 'package:fishing_almanac/widgets/photo_adjust_dialog.dart';
+import 'package:fishing_almanac/widgets/publish_loading_overlay.dart';
 import 'package:fishing_almanac/widgets/species_catalog_search_field.dart';
 import 'package:fishing_almanac/theme/app_font.dart';
 
@@ -54,6 +56,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
   bool _draftListenAttached = false;
   /// 防止连点触发两次发布逻辑（不驱动 UI 阻塞）。
   bool _publishBusy = false;
+
+  /// 当前照片的实际宽高比；null 时使用默认 4:3。
+  double? _detectedPhotoAspectRatio;
   String _latestUploadSource = 'unknown';
 
   Timer? _manualSpeciesDebounce;
@@ -112,6 +117,24 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     return v;
   }
 
+  /// 解码图片尺寸，更新宽高比状态（clamp 到 9:16 ~ 16:9）。
+  Future<void> _detectPhotoAspectRatio(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 64);
+      final frame = await codec.getNextFrame();
+      final w = frame.image.width;
+      final h = frame.image.height;
+      frame.image.dispose();
+      if (!mounted || h == 0) return;
+      final ratio = (w / h).clamp(9 / 16, 16 / 9);
+      if (_detectedPhotoAspectRatio != ratio) {
+        setState(() => _detectedPhotoAspectRatio = ratio);
+      }
+    } catch (_) {
+      // 解码失败时保留默认值
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -150,6 +173,8 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       _lengthController.text = _metricTextForDraft(draft.lengthCm);
       setState(() => _hydrateAiUiFromDraft(draft));
       _scheduleIdentify(draft);
+      final bytes = draft.imageBytes;
+      if (bytes != null && bytes.isNotEmpty) unawaited(_detectPhotoAspectRatio(bytes));
     }
   }
 
@@ -181,6 +206,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       editCacheIdentifyFailed: _identifyFailed,
     );
 
+    if (draft.imageBytes != null && draft.imageBytes!.isNotEmpty) {
+      unawaited(_detectPhotoAspectRatio(draft.imageBytes!));
+    }
     setState(() {});
   }
 
@@ -230,6 +258,8 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
     if (!mounted || widget.editingPublishedId != null) return;
     final d = _draftListenTarget;
     if (d == null) return;
+    final bytes = d.imageBytes;
+    if (bytes != null && bytes.isNotEmpty) unawaited(_detectPhotoAspectRatio(bytes));
     setState(() => _hydrateAiUiFromDraft(d));
     _drainDraftIdentifyUiFlags(d);
   }
@@ -525,7 +555,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
       );
       return;
     }
-    _publishBusy = true;
+    setState(() => _publishBusy = true);
     try {
       final repo = context.read<CatchRepository>();
       final analytics = context.read<AnalyticsClient>();
@@ -647,7 +677,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         publishStartedAtMs: publishStartedAtMs,
       ));
     } finally {
-      _publishBusy = false;
+      if (mounted) setState(() => _publishBusy = false);
     }
   }
 
@@ -831,7 +861,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
         draft.editingReviewStatus.blocksEditingWhilePending;
     final reviewBanner = reviewLocksEditing ? draft.editingReviewStatus.detailHint : '';
 
-    return Scaffold(
+    return Stack(
+      children: [
+      Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         fit: StackFit.expand,
@@ -891,13 +923,20 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: AspectRatio(
-                      aspectRatio: CatchUi.photoAspectWidthOverHeight,
+                      aspectRatio: (_detectedPhotoAspectRatio ?? 4 / 3).clamp(9 / 16, 16 / 9),
                     child: Stack(
                         fit: StackFit.expand,
                       children: [
-                          CatchImageDisplay(
-                            memoryBytes: draft.imageBytes,
-                            networkUrlFallback: draft.imageUrlFallback,
+                          GestureDetector(
+                            onTap: () => showPhotoAdjustDialog(
+                              context,
+                              memoryBytes: draft.imageBytes,
+                              networkUrlFallback: draft.imageUrlFallback,
+                            ),
+                            child: CatchImageDisplay(
+                              memoryBytes: draft.imageBytes,
+                              networkUrlFallback: draft.imageUrlFallback,
+                            ),
                           ),
                           Positioned(
                             left: 0,
@@ -1102,7 +1141,7 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: reviewLocksEditing ? null : _publish,
+                      onTap: (reviewLocksEditing || _publishBusy) ? null : _publish,
                       borderRadius: BorderRadius.circular(999),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1136,6 +1175,9 @@ class _EditCatchScreenState extends State<EditCatchScreen> {
                   ),
                 ],
               ),
+    ),
+      if (_publishBusy) const PublishLoadingOverlay(),
+      ],
     );
   }
 }

@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 
 import 'package:fishing_almanac/models/catch_feed_item.dart';

@@ -192,7 +192,9 @@ class ProfileScreen extends StatelessWidget {
                         bottom: 0,
                         right: 0,
                         child: FloatingActionButton.small(
-                          onPressed: () {},
+                          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('头像修改功能即将上线')),
+                          ),
                           backgroundColor: AppColors.primaryContainer,
                           foregroundColor: AppColors.onPrimaryContainer,
                           child: const Icon(Icons.edit, size: 18),

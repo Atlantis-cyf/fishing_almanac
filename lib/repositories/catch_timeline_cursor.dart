@@ -1,6 +1,8 @@
 /// 时间线分页游标（远程实现时使用；本地首版可忽略）。
 class CatchTimelineCursor {
-  const CatchTimelineCursor({this.occurredAtMs, this.id, this.page});
+  const CatchTimelineCursor({this.occurredAtMs, this.id, this.page})
+      : assert(occurredAtMs != null || id != null || page != null,
+            'CatchTimelineCursor requires at least one non-null field');
 
   /// 与后端 `occurred_at_ms` 对齐的毫秒时间戳（用于 keyset）。
   final int? occurredAtMs;

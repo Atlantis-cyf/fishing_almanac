@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:fishing_almanac/data/species_catalog.dart';
 import 'package:fishing_almanac/models/catch_feed_item.dart';
 import 'package:fishing_almanac/models/catch_review_status.dart';
@@ -93,7 +93,8 @@ class PublishedCatch {
       final d = DateTime.tryParse(s);
       if (d != null) return d;
     }
-    return DateTime.now();
+    debugPrint('PublishedCatch: missing occurred_at for id=${_jsonIdToString(j['id'])}, defaulting to epoch');
+    return DateTime.utc(1970);
   }
 
   CatchFeedItem toFeedItem() {

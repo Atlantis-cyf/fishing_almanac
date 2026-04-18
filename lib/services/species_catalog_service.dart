@@ -21,13 +21,15 @@ class SpeciesCatalogService extends ChangeNotifier {
 
   /// 已规范化学名键（含异名），用于首页等 O(1) 稀有统计；随合并图鉴失效。
   Set<String>? _rareScientificKeySet;
+  List<SpeciesCatalogEntry>? _allCached;
 
   static const Duration _cacheTtl = Duration(minutes: 5);
 
   /// The merged catalog: server entries override local ones by scientific_name.
   List<SpeciesCatalogEntry> get all {
-    if (_merged != null) return _withSystemEntries(_merged!);
-    return _withSystemEntries(SpeciesCatalog.all);
+    if (_allCached != null) return _allCached!;
+    _allCached = _withSystemEntries(_merged ?? SpeciesCatalog.all);
+    return _allCached!;
   }
 
   bool get hasFetched => _serverEntries != null;
@@ -66,6 +68,7 @@ class SpeciesCatalogService extends ChangeNotifier {
 
   void _invalidateRareKeyCache() {
     _rareScientificKeySet = null;
+    _allCached = null;
   }
 
   Set<String> get _rareScientificNameKeys {

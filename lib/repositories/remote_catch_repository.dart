@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -9,6 +8,8 @@ import 'package:fishing_almanac/api/api_exception.dart';
 import 'package:fishing_almanac/api/catch_publish_image_prepare.dart';
 import 'package:fishing_almanac/api/catch_publish_multipart.dart';
 import 'package:fishing_almanac/api/dto/catch_list_page_parser.dart';
+import 'package:fishing_almanac/api/dto/catch_record_dto.dart';
+import 'package:fishing_almanac/api/mappers/catch_record_mapper.dart';
 import 'package:fishing_almanac/auth/auth_session.dart';
 import 'package:fishing_almanac/models/catch_feed_item.dart';
 import 'package:fishing_almanac/models/published_catch.dart';
@@ -148,7 +149,21 @@ class RemoteCatchRepository extends CatchRepository {
   }
 
   @override
-  Future<PublishedCatch?> getById(String id) async => null;
+  Future<PublishedCatch?> getById(String id) async {
+    if (!_auth.isReady || !_auth.isLoggedIn) return null;
+    final trimmed = id.trim();
+    if (trimmed.isEmpty) return null;
+    try {
+      final res = await _api.get<dynamic>(CatchPublishEndpoints.updatePath(trimmed));
+      final json = res.data;
+      if (json is! Map<String, dynamic>) return null;
+      final dto = CatchRecordDto.fromJson(json);
+      return publishedCatchFromDto(dto);
+    } catch (e, st) {
+      debugPrint('RemoteCatchRepository.getById failed: $e\n$st');
+      return null;
+    }
+  }
 
   @override
   Future<void> upsertLocal(PublishedCatch publishedCatch) async {}

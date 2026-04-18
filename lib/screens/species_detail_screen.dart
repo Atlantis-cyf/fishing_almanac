@@ -128,7 +128,7 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                       icon: const Icon(Icons.arrow_back, color: Color(0xFFc3f5ff)),
                     ),
                     title: Text(
-                      'Species Detail',
+                      titleZh.isNotEmpty ? titleZh : sci,
                       style: AppFont.manrope(
                         fontWeight: FontWeight.w700,
                         fontSize: 18,

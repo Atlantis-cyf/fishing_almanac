@@ -34,6 +34,15 @@ GoRouter createAppRouter({required AuthSession authSession}) {
     initialLocation: '/',
     refreshListenable: authSession,
     redirect: (context, state) => authRedirect(authSession, state),
+    errorBuilder: (context, state) => const Scaffold(
+      backgroundColor: Color(0xFF0b1326),
+      body: Center(
+        child: Text(
+          '页面未找到',
+          style: TextStyle(color: Color(0xFFc3f5ff), fontSize: 16),
+        ),
+      ),
+    ),
     routes: [
       GoRoute(path: '/', builder: (c, s) => const WelcomeScreen()),
       GoRoute(path: '/login', builder: (c, s) => const LoginScreen()),

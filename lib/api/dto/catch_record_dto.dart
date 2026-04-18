@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../data/species_catalog.dart';
 import '../../models/catch_review_status.dart';
 
@@ -86,7 +88,7 @@ class CatchRecordDto {
   }
 
   static String _jsonIdToString(dynamic v) {
-    if (v == null) return '';
+    if (v == null) throw const FormatException('catch record missing id');
     if (v is String) return v;
     return v.toString();
   }
@@ -101,6 +103,7 @@ class CatchRecordDto {
       final d = DateTime.tryParse(s);
       if (d != null) return d;
     }
-    return DateTime.now().toUtc();
+    debugPrint('CatchRecordDto: missing occurred_at for id=${_jsonIdToString(m['id'])}, defaulting to epoch');
+    return DateTime.utc(1970);
   }
 }

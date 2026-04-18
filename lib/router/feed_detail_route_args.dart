@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:fishing_almanac/data/species_catalog.dart';
