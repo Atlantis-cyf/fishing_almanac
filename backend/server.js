@@ -692,8 +692,14 @@ app.patch('/me', async (req, res) => {
 });
 
 // -----------------------
-// Species identify (Doubao Vision API)
+// Species identify (Gemini 优先，否则豆包 / Ark；接口契约与响应格式不变)
 // -----------------------
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.0-flash').trim().replace(/^models\//, '');
+const GEMINI_API_BASE = (process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com')
+  .trim()
+  .replace(/\/$/, '');
+
 const DOUBAO_API_KEY = process.env.DOUBAO_API_KEY || process.env.ARK_API_KEY;
 
 /** Ark 控制台展示名常为 Doubao-Seed-1.6-vision；API 要求 doubao-seed-1-6-vision（小写 + 1-6 非 1.6）。 */
@@ -710,6 +716,168 @@ const DOUBAO_MODEL_ID = normalizeDoubaoModelId(
 );
 const DOUBAO_API_BASE = process.env.DOUBAO_API_BASE || 'https://ark.cn-beijing.volces.com/api/v3';
 
+const SPECIES_IDENTIFY_SYSTEM_PROMPT =
+  '你是一个专业的鱼类识别专家。用户会上传一张照片，请判断图中是否有鱼，并尝试识别鱼的种类。' +
+  '只返回一个JSON对象，不要包含任何其他文字、markdown标记或代码块。' +
+  'JSON格式: {"is_fish":true,"species_zh":"中文名","scientific_name":"拉丁学名","taxonomy_zh":"纲·目·科（如 硬骨鱼纲·鲈形目·鲭科）"}' +
+  '如果图中没有鱼（如猫、狗、人、风景等），返回: {"is_fish":false,"species_zh":"","scientific_name":"","taxonomy_zh":""}' +
+  '如果有鱼但无法确定种类，返回: {"is_fish":true,"species_zh":"未确定","scientific_name":"Indeterminate","taxonomy_zh":""}';
+
+const SPECIES_IDENTIFY_USER_TEXT = '请判断图中是否有鱼，如果有请识别鱼种，返回JSON。';
+
+/**
+ * @returns {{ rawContent: string, usage: object|null, modelId: string, engine: string }}
+ */
+async function callGeminiSpeciesIdentify(file, bodyUrl) {
+  let mime = 'image/jpeg';
+  let b64;
+  if (file) {
+    b64 = file.buffer.toString('base64');
+    mime = file.mimetype || 'image/jpeg';
+  } else {
+    const imgRes = await fetch(String(bodyUrl).trim());
+    if (!imgRes.ok) {
+      throw new Error(`无法拉取 image_url 图片: HTTP ${imgRes.status}`);
+    }
+    const ab = await imgRes.arrayBuffer();
+    b64 = Buffer.from(ab).toString('base64');
+    const ct = imgRes.headers.get('content-type');
+    mime = (ct && ct.split(';')[0].trim()) || 'image/jpeg';
+  }
+
+  const url = `${GEMINI_API_BASE}/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+  const body = {
+    systemInstruction: { parts: [{ text: SPECIES_IDENTIFY_SYSTEM_PROMPT }] },
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: SPECIES_IDENTIFY_USER_TEXT },
+          { inlineData: { mimeType: mime, data: b64 } },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 1024,
+    },
+  };
+
+  const apiRes = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const apiText = await apiRes.text().catch(() => '');
+  let apiData;
+  try {
+    apiData = apiText ? JSON.parse(apiText) : {};
+  } catch (_) {
+    apiData = {};
+  }
+
+  if (!apiRes.ok) {
+    const msg = (apiData.error && apiData.error.message) || apiText.slice(0, 500);
+    console.error(`[identify] Gemini API ${apiRes.status}: ${msg}`);
+    throw new Error(`Gemini API ${apiRes.status}`);
+  }
+
+  const cand = apiData.candidates && apiData.candidates[0];
+  if (!cand || !cand.content || !Array.isArray(cand.content.parts)) {
+    const br = apiData.promptFeedback && apiData.promptFeedback.blockReason;
+    console.error('[identify] Gemini no candidates:', apiText.slice(0, 400));
+    throw new Error(br ? `内容被模型拦截: ${br}` : 'Gemini 未返回识别结果');
+  }
+
+  let rawContent = '';
+  for (const p of cand.content.parts) {
+    if (p && typeof p.text === 'string') rawContent += p.text;
+  }
+
+  const usage = apiData.usageMetadata
+    ? {
+        promptTokenCount: apiData.usageMetadata.promptTokenCount,
+        candidatesTokenCount: apiData.usageMetadata.candidatesTokenCount,
+        totalTokenCount: apiData.usageMetadata.totalTokenCount,
+      }
+    : null;
+
+  return { rawContent, usage, modelId: GEMINI_MODEL, engine: 'gemini' };
+}
+
+/**
+ * @returns {{ rawContent: string, usage: object|null, modelId: string, engine: string }}
+ */
+async function callDoubaoSpeciesIdentify(file, bodyUrl) {
+  const imageContent = [];
+  if (file) {
+    const b64 = file.buffer.toString('base64');
+    const mime = file.mimetype || 'image/jpeg';
+    imageContent.push({
+      type: 'input_image',
+      image_url: `data:${mime};base64,${b64}`,
+    });
+  } else if (bodyUrl) {
+    imageContent.push({
+      type: 'input_image',
+      image_url: bodyUrl,
+    });
+  }
+
+  const payload = {
+    model: DOUBAO_MODEL_ID,
+    input: [
+      {
+        role: 'system',
+        content: SPECIES_IDENTIFY_SYSTEM_PROMPT,
+      },
+      {
+        role: 'user',
+        content: [...imageContent, { type: 'input_text', text: SPECIES_IDENTIFY_USER_TEXT }],
+      },
+    ],
+  };
+
+  const apiUrl = `${DOUBAO_API_BASE}/responses`;
+  const apiRes = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${DOUBAO_API_KEY}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!apiRes.ok) {
+    const errText = await apiRes.text().catch(() => '');
+    console.error(`[identify] Doubao API ${apiRes.status}: ${errText.slice(0, 500)}`);
+    throw new Error(`Doubao API ${apiRes.status}`);
+  }
+
+  const apiData = await apiRes.json();
+
+  let rawContent = '';
+  if (apiData.output && Array.isArray(apiData.output)) {
+    for (const item of apiData.output) {
+      if (item.type === 'message' && Array.isArray(item.content)) {
+        for (const c of item.content) {
+          if (c.type === 'output_text' && c.text) {
+            rawContent = c.text;
+            break;
+          }
+        }
+        if (rawContent) break;
+      }
+    }
+  }
+  if (!rawContent && apiData.choices && apiData.choices[0]) {
+    rawContent = (apiData.choices[0].message && apiData.choices[0].message.content) || '';
+  }
+
+  return { rawContent, usage: apiData.usage || null, modelId: DOUBAO_MODEL_ID, engine: 'doubao' };
+}
+
 app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
   const file = req.file;
   const bodyUrl = (req.body && req.body.image_url) || '';
@@ -718,84 +886,33 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
     return jsonError(res, 400, '请提供鱼获照片');
   }
 
-  if (!DOUBAO_API_KEY) {
-    console.error('[identify] DOUBAO_API_KEY not set');
-    return jsonError(res, 503, '识别服务未配置', 'DOUBAO_API_KEY is missing');
+  if (!GEMINI_API_KEY && !DOUBAO_API_KEY) {
+    console.error('[identify] GEMINI_API_KEY and DOUBAO_API_KEY are both unset');
+    return jsonError(
+      res,
+      503,
+      '识别服务未配置',
+      '请在环境变量中设置 GEMINI_API_KEY（推荐）或 DOUBAO_API_KEY',
+    );
+  }
+
+  let rawContent;
+  let usage;
+  let modelId;
+  let engine;
+
+  try {
+    if (GEMINI_API_KEY) {
+      ({ rawContent, usage, modelId, engine } = await callGeminiSpeciesIdentify(file, bodyUrl));
+    } else {
+      ({ rawContent, usage, modelId, engine } = await callDoubaoSpeciesIdentify(file, bodyUrl));
+    }
+  } catch (err) {
+    console.error('[identify] upstream error:', err);
+    return jsonError(res, 502, '识别服务暂时不可用', String(err.message || err));
   }
 
   try {
-    const imageContent = [];
-    if (file) {
-      const b64 = file.buffer.toString('base64');
-      const mime = file.mimetype || 'image/jpeg';
-      imageContent.push({
-        type: 'input_image',
-        image_url: `data:${mime};base64,${b64}`,
-      });
-    } else if (bodyUrl) {
-      imageContent.push({
-        type: 'input_image',
-        image_url: bodyUrl,
-      });
-    }
-
-    const payload = {
-      model: DOUBAO_MODEL_ID,
-      input: [
-        {
-          role: 'system',
-          content: '你是一个专业的鱼类识别专家。用户会上传一张照片，请判断图中是否有鱼，并尝试识别鱼的种类。' +
-            '只返回一个JSON对象，不要包含任何其他文字、markdown标记或代码块。' +
-            'JSON格式: {"is_fish":true,"species_zh":"中文名","scientific_name":"拉丁学名","taxonomy_zh":"纲·目·科（如 硬骨鱼纲·鲈形目·鲭科）"}' +
-            '如果图中没有鱼（如猫、狗、人、风景等），返回: {"is_fish":false,"species_zh":"","scientific_name":"","taxonomy_zh":""}' +
-            '如果有鱼但无法确定种类，返回: {"is_fish":true,"species_zh":"未确定","scientific_name":"Indeterminate","taxonomy_zh":""}',
-        },
-        {
-          role: 'user',
-          content: [
-            ...imageContent,
-            { type: 'input_text', text: '请判断图中是否有鱼，如果有请识别鱼种，返回JSON。' },
-          ],
-        },
-      ],
-    };
-
-    const apiUrl = `${DOUBAO_API_BASE}/responses`;
-    const apiRes = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${DOUBAO_API_KEY}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!apiRes.ok) {
-      const errText = await apiRes.text().catch(() => '');
-      console.error(`[identify] Doubao API ${apiRes.status}: ${errText.slice(0, 500)}`);
-      return jsonError(res, 502, '识别服务暂时不可用', `Doubao API ${apiRes.status}`);
-    }
-
-    const apiData = await apiRes.json();
-
-    let rawContent = '';
-    if (apiData.output && Array.isArray(apiData.output)) {
-      for (const item of apiData.output) {
-        if (item.type === 'message' && Array.isArray(item.content)) {
-          for (const c of item.content) {
-            if (c.type === 'output_text' && c.text) {
-              rawContent = c.text;
-              break;
-            }
-          }
-          if (rawContent) break;
-        }
-      }
-    }
-    if (!rawContent && apiData.choices && apiData.choices[0]) {
-      rawContent = (apiData.choices[0].message && apiData.choices[0].message.content) || '';
-    }
-
     let isFish = true;
     let speciesZh = '未确定';
     let scientificName = 'Indeterminate';
@@ -850,8 +967,8 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
         scientific_name: isFish ? scientificName : null,
         confidence: isFish ? confidence : 0,
         raw_label: rawContent.slice(0, 500),
-        model_engine: 'doubao',
-        model_id: DOUBAO_MODEL_ID,
+        model_engine: engine,
+        model_id: modelId,
       });
     } catch (logErr) {
       console.warn('[identify] log insert failed (non-fatal):', logErr.message);
@@ -877,9 +994,9 @@ app.post('/v1/species/identify', upload.single('image'), async (req, res) => {
       in_catalog: inCatalog,
       raw_label: rawContent.slice(0, 200),
       metadata: {
-        engine: 'doubao',
-        model: DOUBAO_MODEL_ID,
-        tokens: apiData.usage || null,
+        engine,
+        model: modelId,
+        tokens: usage,
       },
     });
   } catch (err) {
