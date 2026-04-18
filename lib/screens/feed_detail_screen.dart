@@ -20,7 +20,6 @@ import 'package:fishing_almanac/repositories/catch_timeline_cursor.dart';
 import 'package:fishing_almanac/repositories/persistence_exception.dart';
 import 'package:fishing_almanac/state/catch_draft.dart';
 import 'package:fishing_almanac/theme/app_colors.dart';
-import 'package:fishing_almanac/theme/catch_ui_constants.dart';
 import 'package:fishing_almanac/widgets/bottom_nav.dart';
 import 'package:fishing_almanac/widgets/catch_image_display.dart';
 import 'package:fishing_almanac/theme/app_font.dart';
@@ -633,12 +632,16 @@ class _FeedItemCard extends StatelessWidget {
                               ),
                             ),
           const SizedBox(height: 8),
-                      AspectRatio(
-            aspectRatio: CatchUi.photoAspectWidthOverHeight,
-            child: CatchImageDisplay(
-              memoryBytes: item.imageBytes,
-              networkUrlFallback: item.imageUrl.isNotEmpty ? item.imageUrl : null,
-                        ),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          return CatchImageDisplay(
+                            memoryBytes: item.imageBytes,
+                            networkUrlFallback: item.imageUrl.isNotEmpty ? item.imageUrl : null,
+                            fit: BoxFit.fitWidth,
+                            width: w,
+                          );
+                        },
                       ),
                       Padding(
                         padding: const EdgeInsets.all(24),
